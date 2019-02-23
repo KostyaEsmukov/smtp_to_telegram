@@ -8,6 +8,12 @@ WORKDIR $GOPATH/src/github.com/KostyaEsmukov/smtp_to_telegram
 COPY . .
 
 RUN dep ensure
+
+# The image should be built with
+# --build-arg ST_VERSION=`git describe --tags --always`
+ARG ST_VERSION
+RUN if [ ! -z "$ST_VERSION" ]; then sed -i "s/UNKNOWN_RELEASE/${ST_VERSION}/g" smtp_to_telegram.go; fi
+
 RUN go build \
         -ldflags "-s -w" \
         -o smtp_to_telegram smtp_to_telegram.go
