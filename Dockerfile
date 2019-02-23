@@ -7,7 +7,8 @@ WORKDIR $GOPATH/src/github.com/KostyaEsmukov/smtp_to_telegram
 
 COPY . .
 
-RUN dep ensure
+RUN dep ensure \
+    && chown -R daemon $GOPATH/pkg/dep
 
 # The image should be built with
 # --build-arg ST_VERSION=`git describe --tags --always`
