@@ -1,23 +1,19 @@
-FROM golang:1.11-alpine3.8
+FROM golang:1.13-alpine3.10
 
-RUN apk add --no-cache git ca-certificates \
-    && apk add dep --no-cache --repository=http://dl-cdn.alpinelinux.org/alpine/edge/community
+RUN apk add --no-cache git ca-certificates
 
-WORKDIR $GOPATH/src/github.com/KostyaEsmukov/smtp_to_telegram
+WORKDIR /app
 
 COPY . .
-
-RUN dep ensure \
-    && chown -R daemon $GOPATH/pkg/dep
 
 # The image should be built with
 # --build-arg ST_VERSION=`git describe --tags --always`
 ARG ST_VERSION
 RUN if [ ! -z "$ST_VERSION" ]; then sed -i "s/UNKNOWN_RELEASE/${ST_VERSION}/g" smtp_to_telegram.go; fi
 
-RUN go build \
+RUN CGO_ENABLED=0 GOOS=linux go build \
         -ldflags "-s -w" \
-        -o smtp_to_telegram smtp_to_telegram.go
+        -a -o smtp_to_telegram
 
 RUN cp ./smtp_to_telegram /smtp_to_telegram
 

@@ -7,7 +7,6 @@ install:
 
 stages:
   - fmt
-  - dep_check
   - test
   - help
 
@@ -17,15 +16,11 @@ jobs:
       script:
         - docker run --rm --entrypoint=sh kostyaesmukov/smtp_to_telegram
             -c "test -z `go fmt`"
-    - stage: dep_check
-      script:
-        - docker run --rm --entrypoint=sh kostyaesmukov/smtp_to_telegram
-            -c "dep check"
     - stage: test
       script:
-        # go 1.11 wants gcc, `CGO_ENABLED=0` fixes that.
+        # go wants gcc, `CGO_ENABLED=0` fixes that.
         # See: https://github.com/golang/go/issues/26988
-        - docker run --rm --entrypoint=sh kostyaesmukov/smtp_to_telegram
+        - docker run --rm --entrypoint=sh -u 0:0 kostyaesmukov/smtp_to_telegram
             -c "CGO_ENABLED=0 go test"
     - stage: help
       script:
