@@ -35,3 +35,20 @@ docker run \
 Assuming that your Email-sending software is running in docker as well,
 you may use `smtp_to_telegram:2525` as the target SMTP address.
 No TLS or authentication is required.
+
+The default Telegram message format is:
+
+```
+From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}
+```
+
+A custom format might be specified as well:
+
+```
+docker run \
+    --name smtp_to_telegram \
+    -e ST_TELEGRAM_CHAT_IDS=<CHAT_ID1>,<CHAT_ID2> \
+    -e ST_TELEGRAM_BOT_TOKEN=<BOT_TOKEN> \
+    -e ST_TELEGRAM_MESSAGE_TEMPLATE="Subject: {subject}\\n\\n{body}" \
+    kostyaesmukov/smtp_to_telegram
+```

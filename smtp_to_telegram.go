@@ -19,9 +19,17 @@ import (
 	"time"
 )
 
-var (
-	d guerrilla.Daemon
-)
+type SmtpConfig struct {
+	smtpListen      string
+	smtpPrimaryHost string
+}
+
+type TelegramConfig struct {
+	telegramChatIds   string
+	telegramBotToken  string
+	telegramApiPrefix string
+	messageTemplate   string
+}
 
 func GetHostname() string {
 	hostname, err := os.Hostname()
@@ -45,17 +53,21 @@ func main() {
 		if !c.IsSet("telegram-bot-token") {
 			return cli.NewExitError("Telegram bot token is missing. See `--help`", 2)
 		}
-		err := SmtpStart(
-			c.String("smtp-listen"),
-			c.String("smtp-primary-host"),
-			c.String("telegram-chat-ids"),
-			c.String("telegram-bot-token"),
-			c.String("telegram-api-prefix"),
-		)
+		smtpConfig := &SmtpConfig{
+			smtpListen:      c.String("smtp-listen"),
+			smtpPrimaryHost: c.String("smtp-primary-host"),
+		}
+		telegramConfig := &TelegramConfig{
+			telegramChatIds:   c.String("telegram-chat-ids"),
+			telegramBotToken:  c.String("telegram-bot-token"),
+			telegramApiPrefix: c.String("telegram-api-prefix"),
+			messageTemplate:   c.String("message-template"),
+		}
+		d, err := SmtpStart(smtpConfig, telegramConfig)
 		if err != nil {
 			panic(fmt.Sprintf("start error: %s", err))
 		}
-		sigHandler()
+		sigHandler(d)
 		return nil
 	}
 	app.Flags = []cli.Flag{
@@ -87,6 +99,12 @@ func main() {
 			Value:  "https://api.telegram.org/",
 			EnvVar: "ST_TELEGRAM_API_PREFIX",
 		},
+		cli.StringFlag{
+			Name:   "message-template",
+			Usage:  "Telegram message template",
+			Value:  "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
+			EnvVar: "ST_TELEGRAM_MESSAGE_TEMPLATE",
+		},
 	}
 	err := app.Run(os.Args)
 	if err != nil {
@@ -95,15 +113,14 @@ func main() {
 }
 
 func SmtpStart(
-	smtpListen string, smtpPrimaryHost string, telegramChatIds string,
-	telegramBotToken string, telegramApiPrefix string) error {
+	smtpConfig *SmtpConfig, telegramConfig *TelegramConfig) (guerrilla.Daemon, error) {
 
 	cfg := &guerrilla.AppConfig{LogFile: log.OutputStdout.String()}
 
 	cfg.AllowedHosts = []string{"."}
 
 	sc := guerrilla.ServerConfig{
-		ListenInterface: smtpListen,
+		ListenInterface: smtpConfig.smtpListen,
 		IsEnabled:       true,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
@@ -112,21 +129,19 @@ func SmtpStart(
 		"save_workers_size":  3,
 		"save_process":       "HeadersParser|Header|Hasher|TelegramBot",
 		"log_received_mails": true,
-		"primary_mail_host":  smtpPrimaryHost,
+		"primary_mail_host":  smtpConfig.smtpPrimaryHost,
 	}
 	cfg.BackendConfig = bcfg
 
-	d = guerrilla.Daemon{Config: cfg}
-	d.AddProcessor("TelegramBot", TelegramBotProcessorFactory(
-		telegramChatIds, telegramBotToken, telegramApiPrefix))
+	daemon := guerrilla.Daemon{Config: cfg}
+	daemon.AddProcessor("TelegramBot", TelegramBotProcessorFactory(telegramConfig))
 
-	err := d.Start()
-	return err
+	err := daemon.Start()
+	return daemon, err
 }
 
 func TelegramBotProcessorFactory(
-	telegramChatIds string, telegramBotToken string,
-	telegramApiPrefix string) func() backends.Decorator {
+	telegramConfig *TelegramConfig) func() backends.Decorator {
 	return func() backends.Decorator {
 		// https://github.com/flashmob/go-guerrilla/wiki/Backends,-configuring-and-extending
 
@@ -134,8 +149,7 @@ func TelegramBotProcessorFactory(
 			return backends.ProcessWith(
 				func(e *mail.Envelope, task backends.SelectTask) (backends.Result, error) {
 					if task == backends.TaskSaveMail {
-						err := SendEmailToTelegram(
-							e, telegramChatIds, telegramBotToken, telegramApiPrefix)
+						err := SendEmailToTelegram(e, telegramConfig)
 						if err != nil {
 							return backends.NewResult(fmt.Sprintf("554 Error: %s", err)), err
 						}
@@ -149,11 +163,11 @@ func TelegramBotProcessorFactory(
 }
 
 func SendEmailToTelegram(e *mail.Envelope,
-	telegramChatIds string, telegramBotToken string, telegramApiPrefix string) error {
+	telegramConfig *TelegramConfig) error {
 
-	message := FormatEmail(e)
+	message := FormatEmail(e, telegramConfig.messageTemplate)
 
-	for _, chatId := range strings.Split(telegramChatIds, ",") {
+	for _, chatId := range strings.Split(telegramConfig.telegramChatIds, ",") {
 
 		// Apparently the native golang's http client supports
 		// http, https and socks5 proxies via HTTP_PROXY/HTTPS_PROXY env vars
@@ -163,28 +177,28 @@ func SendEmailToTelegram(e *mail.Envelope,
 		resp, err := http.PostForm(
 			fmt.Sprintf(
 				"%sbot%s/sendMessage?disable_web_page_preview=true",
-				telegramApiPrefix,
-				telegramBotToken,
+				telegramConfig.telegramApiPrefix,
+				telegramConfig.telegramBotToken,
 			),
 			url.Values{"chat_id": {chatId}, "text": {message}},
 		)
 
 		if err != nil {
-			return errors.New(SanitizeBotToken(err.Error(), telegramBotToken))
+			return errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
 		}
 		if resp.StatusCode != 200 {
 			body, _ := ioutil.ReadAll(resp.Body)
 			return errors.New(fmt.Sprintf(
 				"Non-200 response from Telegram: (%d) %s",
 				resp.StatusCode,
-				SanitizeBotToken(EscapeMultiLine(body), telegramBotToken),
+				SanitizeBotToken(EscapeMultiLine(body), telegramConfig.telegramBotToken),
 			))
 		}
 	}
 	return nil
 }
 
-func FormatEmail(e *mail.Envelope) string {
+func FormatEmail(e *mail.Envelope, messageTemplate string) string {
 	reader := e.NewReader()
 	env, err := enmime.ReadEnvelope(reader)
 	if err != nil {
@@ -194,13 +208,14 @@ func FormatEmail(e *mail.Envelope) string {
 	if text == "" {
 		text = e.Data.String()
 	}
-	return fmt.Sprintf(
-		"From: %s\nTo: %s\nSubject: %s\n\n%s",
-		e.MailFrom.String(),
-		MapAddresses(e.RcptTo),
-		env.GetHeader("subject"),
-		text,
+	r := strings.NewReplacer(
+		"\\n", "\n",
+		"{from}", e.MailFrom.String(),
+		"{to}", MapAddresses(e.RcptTo),
+		"{subject}", env.GetHeader("subject"),
+		"{body}", text,
 	)
+	return r.Replace(messageTemplate)
 }
 
 func MapAddresses(a []mail.Address) string {
@@ -225,7 +240,7 @@ func SanitizeBotToken(s string, botToken string) string {
 	return strings.Replace(s, botToken, "***", -1)
 }
 
-func sigHandler() {
+func sigHandler(d guerrilla.Daemon) {
 	signalChannel := make(chan os.Signal, 1)
 
 	signal.Notify(signalChannel,
