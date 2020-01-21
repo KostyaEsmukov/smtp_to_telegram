@@ -8,7 +8,7 @@ import (
 	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/jhillyerd/enmime"
-	"github.com/urfave/cli"
+	"github.com/urfave/cli/v2"
 	"io/ioutil"
 	"net/http"
 	"net/url"
@@ -71,39 +71,39 @@ func main() {
 		return nil
 	}
 	app.Flags = []cli.Flag{
-		cli.StringFlag{
-			Name:   "smtp-listen",
-			Value:  "127.0.0.1:2525",
-			Usage:  "SMTP: TCP address to listen to",
-			EnvVar: "ST_SMTP_LISTEN",
+		&cli.StringFlag{
+			Name:    "smtp-listen",
+			Value:   "127.0.0.1:2525",
+			Usage:   "SMTP: TCP address to listen to",
+			EnvVars: []string{"ST_SMTP_LISTEN"},
 		},
-		cli.StringFlag{
-			Name:   "smtp-primary-host",
-			Value:  GetHostname(),
-			Usage:  "SMTP: primary host",
-			EnvVar: "ST_SMTP_PRIMARY_HOST",
+		&cli.StringFlag{
+			Name:    "smtp-primary-host",
+			Value:   GetHostname(),
+			Usage:   "SMTP: primary host",
+			EnvVars: []string{"ST_SMTP_PRIMARY_HOST"},
 		},
-		cli.StringFlag{
-			Name:   "telegram-chat-ids",
-			Usage:  "Telegram: comma-separated list of chat ids",
-			EnvVar: "ST_TELEGRAM_CHAT_IDS",
+		&cli.StringFlag{
+			Name:    "telegram-chat-ids",
+			Usage:   "Telegram: comma-separated list of chat ids",
+			EnvVars: []string{"ST_TELEGRAM_CHAT_IDS"},
 		},
-		cli.StringFlag{
-			Name:   "telegram-bot-token",
-			Usage:  "Telegram: bot token",
-			EnvVar: "ST_TELEGRAM_BOT_TOKEN",
+		&cli.StringFlag{
+			Name:    "telegram-bot-token",
+			Usage:   "Telegram: bot token",
+			EnvVars: []string{"ST_TELEGRAM_BOT_TOKEN"},
 		},
-		cli.StringFlag{
-			Name:   "telegram-api-prefix",
-			Usage:  "Telegram: API url prefix",
-			Value:  "https://api.telegram.org/",
-			EnvVar: "ST_TELEGRAM_API_PREFIX",
+		&cli.StringFlag{
+			Name:    "telegram-api-prefix",
+			Usage:   "Telegram: API url prefix",
+			Value:   "https://api.telegram.org/",
+			EnvVars: []string{"ST_TELEGRAM_API_PREFIX"},
 		},
-		cli.StringFlag{
-			Name:   "message-template",
-			Usage:  "Telegram message template",
-			Value:  "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
-			EnvVar: "ST_TELEGRAM_MESSAGE_TEMPLATE",
+		&cli.StringFlag{
+			Name:    "message-template",
+			Usage:   "Telegram message template",
+			Value:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
+			EnvVars: []string{"ST_TELEGRAM_MESSAGE_TEMPLATE"},
 		},
 	}
 	err := app.Run(os.Args)

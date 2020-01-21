@@ -15,7 +15,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/sirupsen/logrus v1.4.2 // indirect
 	github.com/stretchr/testify v1.4.0
-	github.com/urfave/cli v1.22.2
+	github.com/urfave/cli/v2 v2.1.1
 	golang.org/x/net v0.0.0-20200114155413-6afb5195e5aa // indirect
 	golang.org/x/sys v0.0.0-20200121082415-34d275377bf9 // indirect
 	google.golang.org/appengine v1.6.2 // indirect
