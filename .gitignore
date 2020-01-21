@@ -2,3 +2,4 @@
 .env
 *vendor*
 
+smtp_to_telegram
