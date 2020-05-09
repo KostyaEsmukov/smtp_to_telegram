@@ -39,3 +39,4 @@ push:
 
 clean:
 	docker rmi ${image_build_tag} || true
+	docker rmi ${image_builder_tag} || true
