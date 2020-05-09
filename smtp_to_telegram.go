@@ -19,6 +19,10 @@ import (
 	"time"
 )
 
+var (
+	Version string = "UNKNOWN_RELEASE"
+)
+
 type SmtpConfig struct {
 	smtpListen      string
 	smtpPrimaryHost string
@@ -44,7 +48,7 @@ func main() {
 	app.Name = "smtp_to_telegram"
 	app.Usage = "A small program which listens for SMTP and sends " +
 		"all incoming Email messages to Telegram."
-	app.Version = "UNKNOWN_RELEASE"
+	app.Version = Version
 	app.Action = func(c *cli.Context) error {
 		// Required flags are not supported, see https://github.com/urfave/cli/issues/85
 		if !c.IsSet("telegram-chat-ids") {

@@ -9,10 +9,9 @@ COPY . .
 # The image should be built with
 # --build-arg ST_VERSION=`git describe --tags --always`
 ARG ST_VERSION
-RUN if [ ! -z "$ST_VERSION" ]; then sed -i "s/UNKNOWN_RELEASE/${ST_VERSION}/g" smtp_to_telegram.go; fi
-
 RUN CGO_ENABLED=0 GOOS=linux go build \
-        -ldflags "-s -w" \
+        -ldflags "-s -w \
+            -X main.Version=${ST_VERSION:-UNKNOWN_RELEASE}" \
         -a -o smtp_to_telegram
 
 
