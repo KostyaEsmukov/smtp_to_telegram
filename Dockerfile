@@ -29,4 +29,7 @@ USER daemon
 ENV ST_SMTP_LISTEN "0.0.0.0:2525"
 EXPOSE 2525
 
+HEALTHCHECK --interval=1m --timeout=10s \
+  CMD nc -z 127.0.0.1 2525 || exit 1
+
 ENTRYPOINT ["/smtp_to_telegram"]
