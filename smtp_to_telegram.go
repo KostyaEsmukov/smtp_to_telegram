@@ -240,7 +240,7 @@ func FormatEmail(e *mail.Envelope, messageTemplate string) []string {
 
 	// Enforce user's MessageMaxLength limit (if any) for the entire message
 	if (MessageMaxLength > 0) && (len(runes) > MessageMaxLength) {
-		runes = runes[0 : MessageMaxLength+1]
+		runes = runes[0:MessageMaxLength]
 	}
 
 	// Message does not exceed Telegram's current maximum length
