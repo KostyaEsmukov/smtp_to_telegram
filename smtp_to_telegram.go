@@ -19,8 +19,14 @@ import (
 	"time"
 )
 
+const (
+	// Current maximum length in UTF8 characters
+	TelegramMessageSizeLimit = 4096
+)
+
 var (
-	Version string = "UNKNOWN_RELEASE"
+	Version          string = "UNKNOWN_RELEASE"
+	MessageMaxLength        = 0
 )
 
 type SmtpConfig struct {
@@ -67,6 +73,7 @@ func main() {
 			telegramApiPrefix: c.String("telegram-api-prefix"),
 			messageTemplate:   c.String("message-template"),
 		}
+		MessageMaxLength = c.Int("message-max-length")
 		d, err := SmtpStart(smtpConfig, telegramConfig)
 		if err != nil {
 			panic(fmt.Sprintf("start error: %s", err))
@@ -108,6 +115,12 @@ func main() {
 			Usage:   "Telegram message template",
 			Value:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
 			EnvVars: []string{"ST_TELEGRAM_MESSAGE_TEMPLATE"},
+		},
+		&cli.IntFlag{
+			Name:    "message-max-length",
+			Usage:   "Maximum allowed message length, in characters (0 for no limit)",
+			Value:   0,
+			EnvVars: []string{"ST_MESSAGE_MAX_LENGTH"},
 		},
 	}
 	err := app.Run(os.Args)
@@ -169,44 +182,47 @@ func TelegramBotProcessorFactory(
 func SendEmailToTelegram(e *mail.Envelope,
 	telegramConfig *TelegramConfig) error {
 
-	message := FormatEmail(e, telegramConfig.messageTemplate)
+	messages := FormatEmail(e, telegramConfig.messageTemplate)
+	for _, message := range messages {
+		for _, chatId := range strings.Split(telegramConfig.telegramChatIds, ",") {
 
-	for _, chatId := range strings.Split(telegramConfig.telegramChatIds, ",") {
+			// Apparently the native golang's http client supports
+			// http, https and socks5 proxies via HTTP_PROXY/HTTPS_PROXY env vars
+			// out of the box.
+			//
+			// See: https://golang.org/pkg/net/http/#ProxyFromEnvironment
+			resp, err := http.PostForm(
+				fmt.Sprintf(
+					"%sbot%s/sendMessage?disable_web_page_preview=true",
+					telegramConfig.telegramApiPrefix,
+					telegramConfig.telegramBotToken,
+				),
+				url.Values{"chat_id": {chatId}, "text": {message}},
+			)
 
-		// Apparently the native golang's http client supports
-		// http, https and socks5 proxies via HTTP_PROXY/HTTPS_PROXY env vars
-		// out of the box.
-		//
-		// See: https://golang.org/pkg/net/http/#ProxyFromEnvironment
-		resp, err := http.PostForm(
-			fmt.Sprintf(
-				"%sbot%s/sendMessage?disable_web_page_preview=true",
-				telegramConfig.telegramApiPrefix,
-				telegramConfig.telegramBotToken,
-			),
-			url.Values{"chat_id": {chatId}, "text": {message}},
-		)
-
-		if err != nil {
-			return errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
-		}
-		if resp.StatusCode != 200 {
-			body, _ := ioutil.ReadAll(resp.Body)
-			return errors.New(fmt.Sprintf(
-				"Non-200 response from Telegram: (%d) %s",
-				resp.StatusCode,
-				SanitizeBotToken(EscapeMultiLine(body), telegramConfig.telegramBotToken),
-			))
+			if err != nil {
+				return errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
+			}
+			if resp.StatusCode != 200 {
+				body, _ := ioutil.ReadAll(resp.Body)
+				return errors.New(fmt.Sprintf(
+					"Non-200 response from Telegram: (%d) %s",
+					resp.StatusCode,
+					SanitizeBotToken(EscapeMultiLine(body), telegramConfig.telegramBotToken),
+				))
+			}
 		}
 	}
+
 	return nil
 }
 
-func FormatEmail(e *mail.Envelope, messageTemplate string) string {
+func FormatEmail(e *mail.Envelope, messageTemplate string) []string {
 	reader := e.NewReader()
 	env, err := enmime.ReadEnvelope(reader)
 	if err != nil {
-		return fmt.Sprintf("%s\n\nError occurred during email parsing: %s", e, err)
+		s := fmt.Sprintf("%s\n\nError occurred during email parsing: %s", e, err)
+		return []string{s}
 	}
 	text := env.Text
 	if text == "" {
@@ -219,7 +235,34 @@ func FormatEmail(e *mail.Envelope, messageTemplate string) string {
 		"{subject}", env.GetHeader("subject"),
 		"{body}", text,
 	)
-	return r.Replace(messageTemplate)
+	s := r.Replace(messageTemplate)
+	runes := []rune(s)
+
+	// Enforce user's MessageMaxLength limit (if any) for the entire message
+	if (MessageMaxLength > 0) && (len(runes) > MessageMaxLength) {
+		runes = runes[0:MessageMaxLength]
+	}
+
+	// Message does not exceed Telegram's current maximum length
+	if len(runes) <= TelegramMessageSizeLimit {
+		return []string{string(runes)}
+	}
+
+	// Split message into several messages
+	var messages []string
+	res := ""
+	for i, r := range runes {
+		res = res + string(r)
+		if i > 0 && (i+1)%TelegramMessageSizeLimit == 0 {
+			messages = append(messages, res)
+			res = ""
+		}
+	}
+	if res != "" {
+		messages = append(messages, res)
+	}
+
+	return messages
 }
 
 func MapAddresses(a []mail.Address) string {
