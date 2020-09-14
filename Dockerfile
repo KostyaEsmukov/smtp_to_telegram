@@ -30,7 +30,6 @@ USER daemon
 ENV ST_SMTP_LISTEN "0.0.0.0:2525"
 EXPOSE 2525
 
-HEALTHCHECK --interval=1m --timeout=10s \
-  CMD /check-running.sh || exit 1
+HEALTHCHECK CMD /check-running.sh || exit 1
 
 ENTRYPOINT ["/smtp_to_telegram"]
