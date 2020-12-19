@@ -20,7 +20,9 @@ import (
 )
 
 var (
-	Version string = "UNKNOWN_RELEASE"
+	version string = "UNKNOWN_RELEASE"
+	commit  string
+	date    string
 )
 
 type SmtpConfig struct {
@@ -48,7 +50,7 @@ func main() {
 	app.Name = "smtp_to_telegram"
 	app.Usage = "A small program which listens for SMTP and sends " +
 		"all incoming Email messages to Telegram."
-	app.Version = Version
+	app.Version = fmt.Sprintf("%s (commit: %s build-ts: %s)", version, commit, date)
 	app.Action = func(c *cli.Context) error {
 		// Required flags are not supported, see https://github.com/urfave/cli/issues/85
 		if !c.IsSet("telegram-chat-ids") {
