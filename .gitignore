@@ -3,3 +3,10 @@
 *vendor*
 
 smtp_to_telegram
+
+# IntelliJ
+/smtp_to_telegram.iml
+/.idea/
+
+# goreleaser
+/dist/

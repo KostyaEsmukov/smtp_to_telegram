@@ -1,0 +1,32 @@
+before:
+  hooks:
+    - go mod download
+builds:
+- env:
+  - CGO_ENABLED=0
+  binary: smtp_to_telegram
+  goarch:
+      - amd64
+      - arm64
+checksum:
+  name_template: 'checksums.txt'
+dockers:
+  - image_templates:
+      - "kostyaesmukov/smtp_to_telegram:{{ .Version }}-amd64"
+      - "kostyaesmukov/smtp_to_telegram:latest-amd64"
+    binaries:
+      - smtp_to_telegram
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--build-arg"
+      - "ARCH=amd64"
+  - image_templates:
+      - "kostyaesmukov/smtp_to_telegram:{{ .Version }}-arm64v8"
+      - "kostyaesmukov/smtp_to_telegram:latest-arm64v8"
+    binaries:
+      - smtp_to_telegram
+    goarch: arm64
+    dockerfile: Dockerfile
+    build_flag_templates:
+      - "--build-arg"
+      - "ARCH=arm64v8"
