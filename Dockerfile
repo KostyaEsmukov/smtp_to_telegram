@@ -26,7 +26,7 @@ COPY --from=builder /app/smtp_to_telegram /smtp_to_telegram
 
 USER daemon
 
-ENV ST_SMTP_LISTEN "0.0.0.0:2525"
+ENV ST_SMTP_LISTEN="0.0.0.0:2525"
 EXPOSE 2525
 
 ENTRYPOINT ["/smtp_to_telegram"]
