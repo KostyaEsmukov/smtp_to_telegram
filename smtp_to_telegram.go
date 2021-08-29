@@ -13,11 +13,13 @@ import (
 	"github.com/jhillyerd/enmime"
 	"github.com/urfave/cli/v2"
 	"io/ioutil"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"strings"
 	"syscall"
 	"time"
@@ -408,7 +410,8 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 	doParts := func(emoji string, parts []*enmime.Part) {
 		for _, part := range parts {
 			action := "discarded"
-			if part.ContentType == "image/jpeg" { // TODO is png supported?
+			contentType := GuessContentType(part.ContentType, part.FileName)
+			if contentType == "image/jpeg" { // TODO is png supported?
 				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxPhotoSize {
 					action = "sending..."
 					attachments = append(attachments, &FormattedAttachment{
@@ -433,7 +436,7 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 				"- %s %s (%s) %s, %s",
 				emoji,
 				part.FileName,
-				part.ContentType,
+				contentType,
 				units.HumanSize(float64(len(part.Content))),
 				action,
 			)
@@ -446,7 +449,7 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 		line := fmt.Sprintf(
 			"- ❔ %s (%s) %s, discarded",
 			part.FileName,
-			part.ContentType,
+			GuessContentType(part.ContentType, part.FileName),
 			units.HumanSize(float64(len(part.Content))),
 		)
 		attachmentsDetails = append(attachmentsDetails, line)
@@ -553,6 +556,17 @@ func FormatMessage(
 			maxBodyLength, truncatedMessageText))
 	}
 	return fullMessageText, truncatedMessageText
+}
+
+func GuessContentType(contentType string, filename string) string {
+	if contentType != "application/octet-stream" {
+		return contentType
+	}
+	guessedType := mime.TypeByExtension(filepath.Ext(filename))
+	if guessedType != "" {
+		return guessedType
+	}
+	return contentType // Give up
 }
 
 func JoinEmailAddresses(a []mail.Address) string {
