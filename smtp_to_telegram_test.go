@@ -483,6 +483,82 @@ func TestLargeMessageWithAttachmentsProperlyTruncated(t *testing.T) {
 	}
 }
 
+func TestMuttMessagePlaintextParsing(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	// date | mutt -s "test" -a ./tt -- to@test
+	m := `Received: from USER by HOST with local (Exim 4.92)
+	(envelope-from <from@test>)
+	id 111111-000000-OS
+	for to@test; Sun, 29 Aug 2021 21:30:10 +0300
+Date: Sun, 29 Aug 2021 21:30:10 +0300
+From: from@test
+To: to@test
+Subject: test
+Message-ID: <20210829183010.11111111@HOST>
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="TB36FDmn/VVEgNH/"
+Content-Disposition: inline
+User-Agent: Mutt/1.10.1 (2018-07-13)
+
+
+--TB36FDmn/VVEgNH/
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: inline
+
+Sun 29 Aug 2021 09:30:10 PM MSK
+
+--TB36FDmn/VVEgNH/
+Content-Type: text/plain; charset=us-ascii
+Content-Disposition: attachment; filename=tt
+
+hoho
+
+--TB36FDmn/VVEgNH/--
+.`
+
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
+			filename: "tt",
+			caption:  "tt",
+			content:  []byte("hoho\n"),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		},
+	}
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	ds, err := di.Dial()
+	assert.NoError(t, err)
+	defer ds.Close()
+	err = ds.Send("from@test", []string{"to@test"}, bytes.NewBufferString(m))
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	assert.Len(t, h.RequestDocuments, len(expFiles)*len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: test\n" +
+			"\n" +
+			"Sun 29 Aug 2021 09:30:10 PM MSK\n" +
+			"\n" +
+			"Attachments:\n" +
+			"- 📎 tt (text/plain) 5B, sending..."
+	assert.Equal(t, exp, h.RequestMessages[0])
+	for i, expDoc := range expFiles {
+		assert.Equal(t, expDoc, h.RequestDocuments[i])
+	}
+}
+
 func HttpServer(handler http.Handler) *http.Server {
 	h := &http.Server{Addr: testHttpServerListen, Handler: handler}
 	go func() {

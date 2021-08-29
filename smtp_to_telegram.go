@@ -421,6 +421,9 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 
 	doParts := func(emoji string, parts []*enmime.Part) {
 		for _, part := range parts {
+			if bytes.Compare(part.Content, []byte(env.Text)) == 0 {
+				continue
+			}
 			action := "discarded"
 			contentType := GuessContentType(part.ContentType, part.FileName)
 			if contentType == "image/jpeg" { // TODO is png supported?
