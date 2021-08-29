@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	units "github.com/docker/go-units"
@@ -36,6 +37,15 @@ type TelegramConfig struct {
 	telegramApiPrefix         string
 	telegramApiTimeoutSeconds float64
 	messageTemplate           string
+}
+
+type TelegramAPIMessage struct {
+	// https://core.telegram.org/bots/api#message
+	message_id int64
+}
+
+type FormattedEmail struct {
+	text string
 }
 
 func GetHostname() string {
@@ -117,7 +127,7 @@ func main() {
 	}
 	err := app.Run(os.Args)
 	if err != nil {
-		fmt.Printf("%s\n", err)
+		log.Printf("%s\n", err)
 		os.Exit(1)
 	}
 }
@@ -175,48 +185,72 @@ func TelegramBotProcessorFactory(
 func SendEmailToTelegram(e *mail.Envelope,
 	telegramConfig *TelegramConfig) error {
 
-	message := FormatEmail(e, telegramConfig.messageTemplate)
+	message, err := FormatEmail(e, telegramConfig.messageTemplate)
+	if err != nil {
+		return err
+	}
 
 	client := http.Client{
 		Timeout: time.Duration(telegramConfig.telegramApiTimeoutSeconds*1000) * time.Millisecond,
 	}
 
 	for _, chatId := range strings.Split(telegramConfig.telegramChatIds, ",") {
-
-		// Apparently the native golang's http client supports
-		// http, https and socks5 proxies via HTTP_PROXY/HTTPS_PROXY env vars
-		// out of the box.
-		//
-		// See: https://golang.org/pkg/net/http/#ProxyFromEnvironment
-		resp, err := client.PostForm(
-			fmt.Sprintf(
-				"%sbot%s/sendMessage?disable_web_page_preview=true",
-				telegramConfig.telegramApiPrefix,
-				telegramConfig.telegramBotToken,
-			),
-			url.Values{"chat_id": {chatId}, "text": {message}},
-		)
-
+		err := SendMessageToChat(message, chatId, telegramConfig, &client)
 		if err != nil {
+			// If unable to send at least one message -- reject the whole email.
 			return errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
-		}
-		if resp.StatusCode != 200 {
-			body, _ := ioutil.ReadAll(resp.Body)
-			return errors.New(fmt.Sprintf(
-				"Non-200 response from Telegram: (%d) %s",
-				resp.StatusCode,
-				SanitizeBotToken(EscapeMultiLine(body), telegramConfig.telegramBotToken),
-			))
 		}
 	}
 	return nil
 }
 
-func FormatEmail(e *mail.Envelope, messageTemplate string) string {
+func SendMessageToChat(
+	message *FormattedEmail,
+	chatId string,
+	telegramConfig *TelegramConfig,
+	client *http.Client,
+) error {
+	// Apparently the native golang's http client supports
+	// http, https and socks5 proxies via HTTP_PROXY/HTTPS_PROXY env vars
+	// out of the box.
+	//
+	// See: https://golang.org/pkg/net/http/#ProxyFromEnvironment
+	resp, err := client.PostForm(
+		fmt.Sprintf(
+			"%sbot%s/sendMessage?disable_web_page_preview=true",
+			telegramConfig.telegramApiPrefix,
+			telegramConfig.telegramBotToken,
+		),
+		url.Values{"chat_id": {chatId}, "text": {message.text}},
+	)
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != 200 {
+		body, _ := ioutil.ReadAll(resp.Body)
+		return errors.New(fmt.Sprintf(
+			"Non-200 response from Telegram: (%d) %s",
+			resp.StatusCode,
+			EscapeMultiLine(body),
+		))
+	}
+
+	sentMessage := TelegramAPIMessage{}
+	err = json.NewDecoder(resp.Body).Decode(&sentMessage)
+	if err != nil {
+		return fmt.Errorf("Error parsing json body of sendMessage: %v", err)
+	}
+
+	// TODO send attachments
+	return nil
+}
+
+func FormatEmail(e *mail.Envelope, messageTemplate string) (*FormattedEmail, error) {
 	reader := e.NewReader()
 	env, err := enmime.ReadEnvelope(reader)
 	if err != nil {
-		return fmt.Sprintf("%s\n\nError occurred during email parsing: %s", e, err)
+		return nil, fmt.Errorf("%s\n\nError occurred during email parsing: %v", e, err)
 	}
 	text := env.Text
 	if text == "" {
@@ -271,7 +305,9 @@ func FormatEmail(e *mail.Envelope, messageTemplate string) string {
 		"{body}", text,
 		"{attachments_details}", formattedAttachmentsDetails,
 	)
-	return strings.TrimSpace(r.Replace(messageTemplate))
+	return &FormattedEmail{
+		text: strings.TrimSpace(r.Replace(messageTemplate)),
+	}, nil
 }
 
 func JoinEmailAddresses(a []mail.Address) string {

@@ -252,7 +252,7 @@ func NewSuccessHandler() *SuccessHandler {
 }
 
 func (s *SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	w.Write([]byte("OK"))
+	w.Write([]byte(`{"message_id": 123123}`))
 	err := r.ParseForm()
 	if err == nil {
 		s.RequestMessages = append(s.RequestMessages, r.PostForm.Get("text"))
