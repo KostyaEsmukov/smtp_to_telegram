@@ -28,6 +28,10 @@ var (
 	logger  log.Logger
 )
 
+const (
+	BodyTruncated = "\n\n[truncated]"
+)
+
 type SmtpConfig struct {
 	smtpListen      string
 	smtpPrimaryHost string
@@ -42,6 +46,7 @@ type TelegramConfig struct {
 	forwardedAttachmentMaxSize       int
 	forwardedAttachmentMaxPhotoSize  int
 	forwardedAttachmentRespectErrors bool
+	messageLengthToSendAsFile        uint
 }
 
 type TelegramAPIMessage struct {
@@ -104,6 +109,7 @@ func main() {
 			forwardedAttachmentMaxSize:       int(forwardedAttachmentMaxSize),
 			forwardedAttachmentMaxPhotoSize:  int(forwardedAttachmentMaxPhotoSize),
 			forwardedAttachmentRespectErrors: c.Bool("forwarded-attachment-respect-errors"),
+			messageLengthToSendAsFile:        c.Uint("message-length-to-send-as-file"),
 		}
 		d, err := SmtpStart(smtpConfig, telegramConfig)
 		if err != nil {
@@ -177,6 +183,15 @@ func main() {
 				"could not have been forwarded",
 			Value:   false,
 			EnvVars: []string{"ST_FORWARDED_ATTACHMENT_RESPECT_ERRORS"},
+		},
+		&cli.UintFlag{
+			Name: "message-length-to-send-as-file",
+			Usage: "If message length is greater than this number, it is " +
+				"sent truncated followed by a text file containing " +
+				"the full message. Telegram API has a limit of 4096 chars per message. " +
+				"The maximum text file size is determined by `forwarded-attachment-max-size`.",
+			Value:   4095,
+			EnvVars: []string{"ST_MESSAGE_LENGTH_TO_SEND_AS_FILE"},
 		},
 	}
 	err := app.Run(os.Args)
@@ -448,18 +463,96 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 		)
 	}
 
-	r := strings.NewReplacer(
-		"\\n", "\n",
-		"{from}", e.MailFrom.String(),
-		"{to}", JoinEmailAddresses(e.RcptTo),
-		"{subject}", env.GetHeader("subject"),
-		"{body}", text,
-		"{attachments_details}", formattedAttachmentsDetails,
+	fullMessageText, truncatedMessageText := FormatMessage(
+		e.MailFrom.String(),
+		JoinEmailAddresses(e.RcptTo),
+		env.GetHeader("subject"),
+		text,
+		formattedAttachmentsDetails,
+		telegramConfig,
 	)
-	return &FormattedEmail{
-		text:        strings.TrimSpace(r.Replace(telegramConfig.messageTemplate)),
-		attachments: attachments,
-	}, nil
+	if truncatedMessageText == "" { // no need to truncate
+		return &FormattedEmail{
+			text:        fullMessageText,
+			attachments: attachments,
+		}, nil
+	} else {
+		if len(fullMessageText) > telegramConfig.forwardedAttachmentMaxSize {
+			return nil, fmt.Errorf(
+				"The message length (%d) is larger than `forwarded-attachment-max-size` (%d)",
+				len(fullMessageText),
+				telegramConfig.forwardedAttachmentMaxSize,
+			)
+		}
+		at := &FormattedAttachment{
+			filename: "full_message.txt",
+			caption:  "Full message",
+			content:  []byte(fullMessageText),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		}
+		attachments := append([]*FormattedAttachment{at}, attachments...)
+		return &FormattedEmail{
+			text:        truncatedMessageText,
+			attachments: attachments,
+		}, nil
+	}
+}
+
+func FormatMessage(
+	from string, to string, subject string, text string,
+	formattedAttachmentsDetails string,
+	telegramConfig *TelegramConfig,
+) (string, string) {
+	fullMessageText := strings.TrimSpace(
+		strings.NewReplacer(
+			"\\n", "\n",
+			"{from}", from,
+			"{to}", to,
+			"{subject}", subject,
+			"{body}", strings.TrimSpace(text),
+			"{attachments_details}", formattedAttachmentsDetails,
+		).Replace(telegramConfig.messageTemplate),
+	)
+	fullMessageRunes := []rune(fullMessageText)
+	if uint(len(fullMessageRunes)) <= telegramConfig.messageLengthToSendAsFile {
+		// No need to truncate
+		return fullMessageText, ""
+	}
+
+	emptyMessageText := strings.TrimSpace(
+		strings.NewReplacer(
+			"\\n", "\n",
+			"{from}", from,
+			"{to}", to,
+			"{subject}", subject,
+			"{body}", strings.TrimSpace(fmt.Sprintf(".%s", BodyTruncated)),
+			"{attachments_details}", formattedAttachmentsDetails,
+		).Replace(telegramConfig.messageTemplate),
+	)
+	emptyMessageRunes := []rune(emptyMessageText)
+	if uint(len(emptyMessageRunes)) >= telegramConfig.messageLengthToSendAsFile {
+		// Impossible to truncate properly
+		return fullMessageText, string(fullMessageRunes[:telegramConfig.messageLengthToSendAsFile])
+	}
+
+	maxBodyLength := telegramConfig.messageLengthToSendAsFile - uint(len(emptyMessageRunes))
+	truncatedMessageText := strings.TrimSpace(
+		strings.NewReplacer(
+			"\\n", "\n",
+			"{from}", from,
+			"{to}", to,
+			"{subject}", subject,
+			// TODO cut by paragraphs + respect formatting
+			"{body}", strings.TrimSpace(fmt.Sprintf("%s%s",
+				string([]rune(strings.TrimSpace(text))[:maxBodyLength]), BodyTruncated)),
+			"{attachments_details}", formattedAttachmentsDetails,
+		).Replace(telegramConfig.messageTemplate),
+	)
+	if uint(len([]rune(truncatedMessageText))) > telegramConfig.messageLengthToSendAsFile {
+		panic(fmt.Errorf("Unexpected length of truncated message:\n%d\n%s",
+			maxBodyLength, truncatedMessageText))
+	}
+	return fullMessageText, truncatedMessageText
 }
 
 func JoinEmailAddresses(a []mail.Address) string {

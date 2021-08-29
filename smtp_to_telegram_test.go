@@ -37,6 +37,7 @@ func makeTelegramConfig() *TelegramConfig {
 		forwardedAttachmentMaxSize:       0,
 		forwardedAttachmentMaxPhotoSize:  0,
 		forwardedAttachmentRespectErrors: true,
+		messageLengthToSendAsFile:        4095,
 	}
 }
 
@@ -302,6 +303,179 @@ func TestAttachmentsSending(t *testing.T) {
 			"Attachments:\n" +
 			"- 🔗 inline.jpg (image/jpeg) 3B, sending...\n" +
 			"- 📎 hey.txt (text/plain) 2B, sending...\n" +
+			"- 📎 attachment.jpg (image/jpeg) 3B, sending..."
+	assert.Equal(t, exp, h.RequestMessages[0])
+	for i, expDoc := range expFiles {
+		assert.Equal(t, expDoc, h.RequestDocuments[i])
+	}
+}
+
+func TestLargeMessageAggressivelyTruncated(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	telegramConfig.messageLengthToSendAsFile = 12
+	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", "from@test")
+	m.SetHeader("To", "to@test")
+	m.SetHeader("Subject", "Test subj")
+	m.SetBody("text/plain", strings.Repeat("Hello_", 60))
+
+	expFull :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			strings.Repeat("Hello_", 60)
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
+			filename: "full_message.txt",
+			caption:  "Full message",
+			content:  []byte(expFull),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		},
+	}
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	err := di.DialAndSend(m)
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	assert.Len(t, h.RequestDocuments, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+
+	exp :=
+		"From: from@t"
+	assert.Equal(t, exp, h.RequestMessages[0])
+	for i, expDoc := range expFiles {
+		assert.Equal(t, expDoc, h.RequestDocuments[i])
+	}
+}
+
+func TestLargeMessageProperlyTruncated(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	telegramConfig.messageLengthToSendAsFile = 100
+	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", "from@test")
+	m.SetHeader("To", "to@test")
+	m.SetHeader("Subject", "Test subj")
+	m.SetBody("text/plain", strings.Repeat("Hello_", 60))
+
+	expFull :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			strings.Repeat("Hello_", 60)
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
+			filename: "full_message.txt",
+			caption:  "Full message",
+			content:  []byte(expFull),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		},
+	}
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	err := di.DialAndSend(m)
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	assert.Len(t, h.RequestDocuments, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			"Hello_Hello_Hello_Hello_Hello_Hello_He\n" +
+			"\n" +
+			"[truncated]"
+	assert.Equal(t, exp, h.RequestMessages[0])
+	for i, expDoc := range expFiles {
+		assert.Equal(t, expDoc, h.RequestDocuments[i])
+	}
+}
+
+func TestLargeMessageWithAttachmentsProperlyTruncated(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	telegramConfig.messageLengthToSendAsFile = 150
+	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", "from@test")
+	m.SetHeader("To", "to@test")
+	m.SetHeader("Subject", "Test subj")
+	m.SetBody("text/plain", strings.Repeat("Hel lo", 60))
+	m.Attach("attachment.jpg", goMailBody([]byte("JPG")))
+
+	expFull :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			strings.Repeat("Hel lo", 60) +
+			"\n" +
+			"\n" +
+			"Attachments:\n" +
+			"- 📎 attachment.jpg (image/jpeg) 3B, sending..."
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
+			filename: "full_message.txt",
+			caption:  "Full message",
+			content:  []byte(expFull),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		},
+		&FormattedAttachment{
+			filename: "attachment.jpg",
+			caption:  "attachment.jpg",
+			content:  []byte("JPG"),
+			fileType: ATTACHMENT_TYPE_PHOTO,
+		},
+	}
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	err := di.DialAndSend(m)
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	assert.Len(t, h.RequestDocuments, 2*len(strings.Split(telegramConfig.telegramChatIds, ",")))
+
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			"Hel loHel loHel loHel loHel\n" +
+			"\n" +
+			"[truncated]\n" +
+			"\n" +
+			"Attachments:\n" +
 			"- 📎 attachment.jpg (image/jpeg) 3B, sending..."
 	assert.Equal(t, exp, h.RequestMessages[0])
 	for i, expDoc := range expFiles {
