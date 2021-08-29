@@ -6,6 +6,7 @@ import (
 	"github.com/flashmob/go-guerrilla"
 	"github.com/stretchr/testify/assert"
 	"gopkg.in/gomail.v2"
+	"io"
 	"net/http"
 	"net/smtp"
 	"strings"
@@ -31,7 +32,7 @@ func makeTelegramConfig() *TelegramConfig {
 		telegramChatIds:   "42,142",
 		telegramBotToken:  "42:ZZZ",
 		telegramApiPrefix: "http://" + testHttpServerListen + "/",
-		messageTemplate:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
+		messageTemplate:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}\\n\\n{attachments_details}",
 	}
 }
 
@@ -55,6 +56,13 @@ func waitSmtp(smtpHost string) {
 	}
 }
 
+func goMailBody(content []byte) gomail.FileSetting {
+	return gomail.SetCopyFunc(func(w io.Writer) error {
+		_, err := w.Write(content)
+		return err
+	})
+}
+
 func TestSuccess(t *testing.T) {
 	smtpConfig := makeSmtpConfig()
 	telegramConfig := makeTelegramConfig()
@@ -74,7 +82,7 @@ func TestSuccess(t *testing.T) {
 			"To: to@test\n" +
 			"Subject: \n" +
 			"\n" +
-			"hi\n"
+			"hi"
 
 	assert.Equal(t, exp, h.RequestMessages[0])
 }
@@ -97,7 +105,7 @@ func TestSuccessCustomFormat(t *testing.T) {
 	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
 	exp := "Subject: \n" +
 		"\n" +
-		"hi\n"
+		"hi"
 
 	assert.Equal(t, exp, h.RequestMessages[0])
 }
@@ -150,7 +158,7 @@ func TestEncodedContent(t *testing.T) {
 			"To: to@test\n" +
 			"Subject: 😎\n" +
 			"\n" +
-			"💩\n"
+			"💩"
 	assert.Equal(t, exp, h.RequestMessages[0])
 }
 
@@ -182,6 +190,48 @@ func TestHtmlAttachmentIsIgnored(t *testing.T) {
 			"Subject: Test subj\n" +
 			"\n" +
 			"Text body"
+	assert.Equal(t, exp, h.RequestMessages[0])
+}
+
+func TestAttachmentsDetails(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	m := gomail.NewMessage()
+	m.SetHeader("From", "from@test")
+	m.SetHeader("To", "to@test")
+	m.SetHeader("Subject", "Test subj")
+	m.SetBody("text/plain", "Text body")
+	m.AddAlternative("text/html", "<p>HTML body</p>")
+	// attachment txt file
+	m.Attach("hey.txt", goMailBody([]byte("hi")))
+	// inline image
+	m.Embed("inline.jpg", goMailBody([]byte("JPG")))
+	// attachment image
+	m.Attach("attachment.jpg", goMailBody([]byte("JPG")))
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	err := di.DialAndSend(m)
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Test subj\n" +
+			"\n" +
+			"Text body\n" +
+			"\n" +
+			"Attachments:\n" +
+			"- 🔗 inline.jpg (image/jpeg) 3B, discarded\n" +
+			"- 📎 hey.txt (text/plain) 2B, discarded\n" +
+			"- 📎 attachment.jpg (image/jpeg) 3B, discarded"
 	assert.Equal(t, exp, h.RequestMessages[0])
 }
 

@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	units "github.com/docker/go-units"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
 	guerrilla_log "github.com/flashmob/go-guerrilla/log"
@@ -104,7 +105,7 @@ func main() {
 		&cli.StringFlag{
 			Name:    "message-template",
 			Usage:   "Telegram message template",
-			Value:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
+			Value:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}\\n\\n{attachments_details}",
 			EnvVars: []string{"ST_TELEGRAM_MESSAGE_TEMPLATE"},
 		},
 		&cli.Float64Flag{
@@ -221,14 +222,56 @@ func FormatEmail(e *mail.Envelope, messageTemplate string) string {
 	if text == "" {
 		text = e.Data.String()
 	}
+
+	attachmentsDetails := []string{}
+	for _, part := range env.Inlines {
+		line := fmt.Sprintf(
+			"- 🔗 %s (%s) %s, discarded",
+			part.FileName,
+			part.ContentType,
+			units.HumanSize(float64(len(part.Content))),
+		)
+		attachmentsDetails = append(attachmentsDetails, line)
+	}
+	for _, part := range env.Attachments {
+		line := fmt.Sprintf(
+			"- 📎 %s (%s) %s, discarded",
+			part.FileName,
+			part.ContentType,
+			units.HumanSize(float64(len(part.Content))),
+		)
+		attachmentsDetails = append(attachmentsDetails, line)
+	}
+	for _, part := range env.OtherParts {
+		line := fmt.Sprintf(
+			"- ❔ %s (%s) %s, discarded",
+			part.FileName,
+			part.ContentType,
+			units.HumanSize(float64(len(part.Content))),
+		)
+		attachmentsDetails = append(attachmentsDetails, line)
+	}
+	for _, e := range env.Errors {
+		log.Printf("Envelope error: %s", e.Error())
+	}
+
+	formattedAttachmentsDetails := ""
+	if len(attachmentsDetails) > 0 {
+		formattedAttachmentsDetails = fmt.Sprintf(
+			"Attachments:\n%s",
+			strings.Join(attachmentsDetails, "\n"),
+		)
+	}
+
 	r := strings.NewReplacer(
 		"\\n", "\n",
 		"{from}", e.MailFrom.String(),
 		"{to}", JoinEmailAddresses(e.RcptTo),
 		"{subject}", env.GetHeader("subject"),
 		"{body}", text,
+		"{attachments_details}", formattedAttachmentsDetails,
 	)
-	return r.Replace(messageTemplate)
+	return strings.TrimSpace(r.Replace(messageTemplate))
 }
 
 func JoinEmailAddresses(a []mail.Address) string {
