@@ -412,9 +412,6 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 		return nil, fmt.Errorf("%s\n\nError occurred during email parsing: %v", e, err)
 	}
 	text := env.Text
-	if text == "" {
-		text = e.Data.String()
-	}
 
 	attachmentsDetails := []string{}
 	attachments := []*FormattedAttachment{}
@@ -422,6 +419,10 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 	doParts := func(emoji string, parts []*enmime.Part) {
 		for _, part := range parts {
 			if bytes.Compare(part.Content, []byte(env.Text)) == 0 {
+				continue
+			}
+			if text == "" && part.ContentType == "text/plain" && part.FileName == "" {
+				text = string(part.Content)
 				continue
 			}
 			action := "discarded"
@@ -471,6 +472,10 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 	}
 	for _, e := range env.Errors {
 		logger.Errorf("Envelope error: %s", e.Error())
+	}
+
+	if text == "" {
+		text = e.Data.String()
 	}
 
 	formattedAttachmentsDetails := ""

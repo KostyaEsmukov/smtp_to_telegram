@@ -559,6 +559,83 @@ hoho
 	}
 }
 
+func TestMailxMessagePlaintextParsing(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	// date | mail -A ./tt -s "test" to@test
+	m := `Received: from USER by HOST with local (Exim 4.92)
+	(envelope-from <from@test>)
+	id 111111-000000-Bj
+	for to@test; Sun, 29 Aug 2021 21:30:23 +0300
+MIME-Version: 1.0
+Content-Type: multipart/mixed; boundary="1493203554-1630261823=:345292"
+Subject: test
+To: to@test
+X-Mailer: mail (GNU Mailutils 3.5)
+Message-Id: <2222222-000000-Bj@HOST>
+From: from@test
+Date: Sun, 29 Aug 2021 21:30:23 +0300
+
+--1493203554-1630261823=:345292
+Content-Type: text/plain; charset=UTF-8
+Content-Disposition: attachment
+Content-Transfer-Encoding: 8bit
+Content-ID: <20210829213023.345292.1@HOST>
+
+Sun 29 Aug 2021 09:30:23 PM MSK
+
+--1493203554-1630261823=:345292
+Content-Type: application/octet-stream; name="tt"
+Content-Disposition: attachment; filename="./tt"
+Content-Transfer-Encoding: base64
+Content-ID: <20210829213023.345292.1@HOST>
+
+aG9obwo=
+--1493203554-1630261823=:345292--
+.`
+
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
+			filename: "tt",
+			caption:  "./tt",
+			content:  []byte("hoho\n"),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
+		},
+	}
+
+	di := gomail.NewPlainDialer(testSmtpListenHost, testSmtpListenPort, "", "")
+	ds, err := di.Dial()
+	assert.NoError(t, err)
+	defer ds.Close()
+	err = ds.Send("from@test", []string{"to@test"}, bytes.NewBufferString(m))
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	assert.Len(t, h.RequestDocuments, len(expFiles)*len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: test\n" +
+			"\n" +
+			"Sun 29 Aug 2021 09:30:23 PM MSK\n" +
+			"\n" +
+			"Attachments:\n" +
+			"- 📎 ./tt (application/octet-stream) 5B, sending..."
+	assert.Equal(t, exp, h.RequestMessages[0])
+	for i, expDoc := range expFiles {
+		assert.Equal(t, expDoc, h.RequestDocuments[i])
+	}
+}
+
 func HttpServer(handler http.Handler) *http.Server {
 	h := &http.Server{Addr: testHttpServerListen, Handler: handler}
 	go func() {
