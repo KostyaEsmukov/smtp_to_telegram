@@ -1,6 +1,6 @@
 FROM golang:1.17-alpine3.14 AS builder
 
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates mailcap
 
 WORKDIR /app
 
