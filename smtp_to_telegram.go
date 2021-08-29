@@ -5,11 +5,12 @@ import (
 	"fmt"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
+	guerrilla_log "github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/jhillyerd/enmime"
 	"github.com/urfave/cli/v2"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/url"
 	"os"
@@ -123,7 +124,7 @@ func main() {
 func SmtpStart(
 	smtpConfig *SmtpConfig, telegramConfig *TelegramConfig) (guerrilla.Daemon, error) {
 
-	cfg := &guerrilla.AppConfig{LogFile: log.OutputStdout.String()}
+	cfg := &guerrilla.AppConfig{LogFile: guerrilla_log.OutputStdout.String()}
 
 	cfg.AllowedHosts = []string{"."}
 
@@ -263,17 +264,17 @@ func sigHandler(d guerrilla.Daemon) {
 		os.Kill,
 	)
 	for range signalChannel {
-		d.Log().Infof("Shutdown signal caught")
+		log.Print("Shutdown signal caught")
 		go func() {
 			select {
 			// exit if graceful shutdown not finished in 60 sec.
 			case <-time.After(time.Second * 60):
-				d.Log().Error("graceful shutdown timed out")
+				log.Print("graceful shutdown timed out")
 				os.Exit(1)
 			}
 		}()
 		d.Shutdown()
-		d.Log().Infof("Shutdown completed, exiting.")
+		log.Print("Shutdown completed, exiting.")
 		return
 	}
 }
