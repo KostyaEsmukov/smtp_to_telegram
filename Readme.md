@@ -41,7 +41,7 @@ No TLS or authentication is required.
 The default Telegram message format is:
 
 ```
-From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}
+From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}\\n\\n{attachments_details}
 ```
 
 A custom format might be specified as well:

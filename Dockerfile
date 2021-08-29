@@ -1,6 +1,6 @@
 FROM golang:1.17-alpine3.14 AS builder
 
-RUN apk add --no-cache git ca-certificates
+RUN apk add --no-cache git ca-certificates mailcap
 
 WORKDIR /app
 
@@ -20,7 +20,7 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 FROM alpine:3.14
 
-RUN apk add --no-cache ca-certificates
+RUN apk add --no-cache ca-certificates mailcap
 
 COPY --from=builder /app/smtp_to_telegram /smtp_to_telegram
 
