@@ -223,14 +223,14 @@ func FormatEmail(e *mail.Envelope, messageTemplate string) string {
 	r := strings.NewReplacer(
 		"\\n", "\n",
 		"{from}", e.MailFrom.String(),
-		"{to}", MapAddresses(e.RcptTo),
+		"{to}", JoinEmailAddresses(e.RcptTo),
 		"{subject}", env.GetHeader("subject"),
 		"{body}", text,
 	)
 	return r.Replace(messageTemplate)
 }
 
-func MapAddresses(a []mail.Address) string {
+func JoinEmailAddresses(a []mail.Address) string {
 	s := []string{}
 	for _, aa := range a {
 		s = append(s, aa.String())
