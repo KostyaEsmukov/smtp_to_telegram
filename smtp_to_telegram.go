@@ -29,10 +29,11 @@ type SmtpConfig struct {
 }
 
 type TelegramConfig struct {
-	telegramChatIds   string
-	telegramBotToken  string
-	telegramApiPrefix string
-	messageTemplate   string
+	telegramChatIds           string
+	telegramBotToken          string
+	telegramApiPrefix         string
+	telegramApiTimeoutSeconds float64
+	messageTemplate           string
 }
 
 func GetHostname() string {
@@ -62,10 +63,11 @@ func main() {
 			smtpPrimaryHost: c.String("smtp-primary-host"),
 		}
 		telegramConfig := &TelegramConfig{
-			telegramChatIds:   c.String("telegram-chat-ids"),
-			telegramBotToken:  c.String("telegram-bot-token"),
-			telegramApiPrefix: c.String("telegram-api-prefix"),
-			messageTemplate:   c.String("message-template"),
+			telegramChatIds:           c.String("telegram-chat-ids"),
+			telegramBotToken:          c.String("telegram-bot-token"),
+			telegramApiPrefix:         c.String("telegram-api-prefix"),
+			telegramApiTimeoutSeconds: c.Float64("telegram-api-timeout-seconds"),
+			messageTemplate:           c.String("message-template"),
 		}
 		d, err := SmtpStart(smtpConfig, telegramConfig)
 		if err != nil {
@@ -108,6 +110,12 @@ func main() {
 			Usage:   "Telegram message template",
 			Value:   "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}",
 			EnvVars: []string{"ST_TELEGRAM_MESSAGE_TEMPLATE"},
+		},
+		&cli.Float64Flag{
+			Name:    "telegram-api-timeout-seconds",
+			Usage:   "HTTP timeout used for requests to the Telegram API",
+			Value:   10,
+			EnvVars: []string{"ST_TELEGRAM_API_TIMEOUT_SECONDS"},
 		},
 	}
 	err := app.Run(os.Args)
@@ -171,6 +179,10 @@ func SendEmailToTelegram(e *mail.Envelope,
 
 	message := FormatEmail(e, telegramConfig.messageTemplate)
 
+	client := http.Client{
+		Timeout: time.Duration(telegramConfig.telegramApiTimeoutSeconds*1000) * time.Millisecond,
+	}
+
 	for _, chatId := range strings.Split(telegramConfig.telegramChatIds, ",") {
 
 		// Apparently the native golang's http client supports
@@ -178,7 +190,7 @@ func SendEmailToTelegram(e *mail.Envelope,
 		// out of the box.
 		//
 		// See: https://golang.org/pkg/net/http/#ProxyFromEnvironment
-		resp, err := http.PostForm(
+		resp, err := client.PostForm(
 			fmt.Sprintf(
 				"%sbot%s/sendMessage?disable_web_page_preview=true",
 				telegramConfig.telegramApiPrefix,
