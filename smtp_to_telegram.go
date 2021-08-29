@@ -51,9 +51,14 @@ type TelegramConfig struct {
 	messageLengthToSendAsFile        uint
 }
 
+type TelegramAPIMessageResult struct {
+	Ok     bool                `json:"ok"`
+	Result *TelegramAPIMessage `json:"result"`
+}
+
 type TelegramAPIMessage struct {
 	// https://core.telegram.org/bots/api#message
-	message_id int64
+	MessageId json.Number `json:"message_id"`
 }
 
 type FormattedEmail struct {
@@ -322,12 +327,19 @@ func SendMessageToChat(
 		))
 	}
 
-	sentMessage := &TelegramAPIMessage{}
-	err = json.NewDecoder(resp.Body).Decode(sentMessage)
+	j, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("Error reading json body of sendMessage: %v", err)
+	}
+	result := &TelegramAPIMessageResult{}
+	err = json.Unmarshal(j, result)
 	if err != nil {
 		return nil, fmt.Errorf("Error parsing json body of sendMessage: %v", err)
 	}
-	return sentMessage, nil
+	if result.Ok != true {
+		return nil, fmt.Errorf("ok != true: %s", j)
+	}
+	return result.Result, nil
 }
 
 func SendAttachmentToChat(
@@ -345,7 +357,7 @@ func SendAttachmentToChat(
 		// https://core.telegram.org/bots/api#senddocument
 		method = "sendDocument"
 		panicIfError(w.WriteField("chat_id", chatId))
-		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%d", sentMessage.message_id)))
+		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%s", sentMessage.MessageId)))
 		panicIfError(w.WriteField("caption", attachment.caption))
 		// TODO maybe reuse files sent to multiple chats via file_id?
 		dw, err := w.CreateFormFile("document", attachment.filename)
@@ -356,7 +368,7 @@ func SendAttachmentToChat(
 		// https://core.telegram.org/bots/api#sendphoto
 		method = "sendPhoto"
 		panicIfError(w.WriteField("chat_id", chatId))
-		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%d", sentMessage.message_id)))
+		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%s", sentMessage.MessageId)))
 		panicIfError(w.WriteField("caption", attachment.caption))
 		// TODO maybe reuse files sent to multiple chats via file_id?
 		dw, err := w.CreateFormFile("photo", attachment.filename)

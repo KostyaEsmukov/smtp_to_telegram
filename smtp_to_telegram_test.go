@@ -505,7 +505,7 @@ func NewSuccessHandler() *SuccessHandler {
 
 func (s *SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if strings.Contains(r.URL.Path, "sendMessage") {
-		w.Write([]byte(`{"message_id": 123123}`))
+		w.Write([]byte(`{"ok":true,"result":{"message_id": 123123}}`))
 		err := r.ParseForm()
 		if err != nil {
 			panic(err)
@@ -517,6 +517,9 @@ func (s *SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	isSendPhoto := strings.Contains(r.URL.Path, "sendPhoto")
 	if isSendDocument || isSendPhoto {
 		w.Write([]byte(`{}`))
+		if r.FormValue("reply_to_message_id") != "123123" {
+			panic(fmt.Errorf("Unexpected reply_to_message_id: %s", r.FormValue("reply_to_message_id")))
+		}
 		err := r.ParseMultipartForm(1024 * 1024)
 		if err != nil {
 			panic(err)
