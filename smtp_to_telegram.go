@@ -8,12 +8,11 @@ import (
 	units "github.com/docker/go-units"
 	"github.com/flashmob/go-guerrilla"
 	"github.com/flashmob/go-guerrilla/backends"
-	guerrilla_log "github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/log"
 	"github.com/flashmob/go-guerrilla/mail"
 	"github.com/jhillyerd/enmime"
 	"github.com/urfave/cli/v2"
 	"io/ioutil"
-	"log"
 	"mime/multipart"
 	"net/http"
 	"net/url"
@@ -26,6 +25,7 @@ import (
 
 var (
 	Version string = "UNKNOWN_RELEASE"
+	logger  log.Logger
 )
 
 type SmtpConfig struct {
@@ -80,7 +80,7 @@ func main() {
 		}
 		forwardedAttachmentMaxSize, err := units.FromHumanSize(c.String("forwarded-attachment-max-size"))
 		if err != nil {
-			log.Printf("%s\n", err)
+			fmt.Printf("%s\n", err)
 			os.Exit(1)
 		}
 		telegramConfig := &TelegramConfig{
@@ -160,7 +160,7 @@ func main() {
 	}
 	err := app.Run(os.Args)
 	if err != nil {
-		log.Printf("%s\n", err)
+		fmt.Printf("%s\n", err)
 		os.Exit(1)
 	}
 }
@@ -168,7 +168,7 @@ func main() {
 func SmtpStart(
 	smtpConfig *SmtpConfig, telegramConfig *TelegramConfig) (guerrilla.Daemon, error) {
 
-	cfg := &guerrilla.AppConfig{LogFile: guerrilla_log.OutputStdout.String()}
+	cfg := &guerrilla.AppConfig{LogFile: log.OutputStdout.String()}
 
 	cfg.AllowedHosts = []string{"."}
 
@@ -188,6 +188,8 @@ func SmtpStart(
 
 	daemon := guerrilla.Daemon{Config: cfg}
 	daemon.AddProcessor("TelegramBot", TelegramBotProcessorFactory(telegramConfig))
+
+	logger = daemon.Log()
 
 	err := daemon.Start()
 	return daemon, err
@@ -241,7 +243,7 @@ func SendEmailToTelegram(e *mail.Envelope,
 				if telegramConfig.forwardedAttachmentRespectErrors {
 					return err
 				} else {
-					log.Printf("Ignoring sendDocument error: %s", err)
+					logger.Errorf("Ignoring sendDocument error: %s", err)
 				}
 			}
 		}
@@ -396,7 +398,7 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 		attachmentsDetails = append(attachmentsDetails, line)
 	}
 	for _, e := range env.Errors {
-		log.Printf("Envelope error: %s", e.Error())
+		logger.Errorf("Envelope error: %s", e.Error())
 	}
 
 	formattedAttachmentsDetails := ""
@@ -460,17 +462,17 @@ func sigHandler(d guerrilla.Daemon) {
 		os.Kill,
 	)
 	for range signalChannel {
-		log.Print("Shutdown signal caught")
+		logger.Info("Shutdown signal caught")
 		go func() {
 			select {
 			// exit if graceful shutdown not finished in 60 sec.
 			case <-time.After(time.Second * 60):
-				log.Print("graceful shutdown timed out")
+				logger.Error("graceful shutdown timed out")
 				os.Exit(1)
 			}
 		}()
 		d.Shutdown()
-		log.Print("Shutdown completed, exiting.")
+		logger.Info("Shutdown completed, exiting.")
 		return
 	}
 }
