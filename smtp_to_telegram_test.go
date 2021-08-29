@@ -35,6 +35,7 @@ func makeTelegramConfig() *TelegramConfig {
 		telegramApiPrefix:                "http://" + testHttpServerListen + "/",
 		messageTemplate:                  "From: {from}\\nTo: {to}\\nSubject: {subject}\\n\\n{body}\\n\\n{attachments_details}",
 		forwardedAttachmentMaxSize:       0,
+		forwardedAttachmentMaxPhotoSize:  0,
 		forwardedAttachmentRespectErrors: true,
 	}
 }
@@ -243,6 +244,7 @@ func TestAttachmentsSending(t *testing.T) {
 	smtpConfig := makeSmtpConfig()
 	telegramConfig := makeTelegramConfig()
 	telegramConfig.forwardedAttachmentMaxSize = 1024
+	telegramConfig.forwardedAttachmentMaxPhotoSize = 1024
 	d := startSmtp(smtpConfig, telegramConfig)
 	defer d.Shutdown()
 
@@ -263,21 +265,24 @@ func TestAttachmentsSending(t *testing.T) {
 	// attachment image
 	m.Attach("attachment.jpg", goMailBody([]byte("JPG")))
 
-	expFiles := []*FormattedDocument{
-		&FormattedDocument{
+	expFiles := []*FormattedAttachment{
+		&FormattedAttachment{
 			filename: "inline.jpg",
 			caption:  "inline.jpg",
-			document: []byte("JPG"),
+			content:  []byte("JPG"),
+			fileType: ATTACHMENT_TYPE_PHOTO,
 		},
-		&FormattedDocument{
+		&FormattedAttachment{
 			filename: "hey.txt",
 			caption:  "hey.txt",
-			document: []byte("hi"),
+			content:  []byte("hi"),
+			fileType: ATTACHMENT_TYPE_DOCUMENT,
 		},
-		&FormattedDocument{
+		&FormattedAttachment{
 			filename: "attachment.jpg",
 			caption:  "attachment.jpg",
-			document: []byte("JPG"),
+			content:  []byte("JPG"),
+			fileType: ATTACHMENT_TYPE_PHOTO,
 		},
 	}
 
@@ -314,13 +319,13 @@ func HttpServer(handler http.Handler) *http.Server {
 
 type SuccessHandler struct {
 	RequestMessages  []string
-	RequestDocuments []*FormattedDocument
+	RequestDocuments []*FormattedAttachment
 }
 
 func NewSuccessHandler() *SuccessHandler {
 	return &SuccessHandler{
 		RequestMessages:  []string{},
-		RequestDocuments: []*FormattedDocument{},
+		RequestDocuments: []*FormattedAttachment{},
 	}
 }
 
@@ -332,13 +337,23 @@ func (s *SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			panic(err)
 		}
 		s.RequestMessages = append(s.RequestMessages, r.PostForm.Get("text"))
-	} else if strings.Contains(r.URL.Path, "sendDocument") {
+		return
+	}
+	isSendDocument := strings.Contains(r.URL.Path, "sendDocument")
+	isSendPhoto := strings.Contains(r.URL.Path, "sendPhoto")
+	if isSendDocument || isSendPhoto {
 		w.Write([]byte(`{}`))
 		err := r.ParseMultipartForm(1024 * 1024)
 		if err != nil {
 			panic(err)
 		}
-		file, header, err := r.FormFile("document")
+		key := "document"
+		fileType := ATTACHMENT_TYPE_DOCUMENT
+		if isSendPhoto {
+			key = "photo"
+			fileType = ATTACHMENT_TYPE_PHOTO
+		}
+		file, header, err := r.FormFile(key)
 		if err != nil {
 			panic(err)
 		}
@@ -347,10 +362,11 @@ func (s *SuccessHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		io.Copy(&buf, file)
 		s.RequestDocuments = append(
 			s.RequestDocuments,
-			&FormattedDocument{
+			&FormattedAttachment{
 				filename: header.Filename,
 				caption:  r.FormValue("caption"),
-				document: buf.Bytes(),
+				content:  buf.Bytes(),
+				fileType: fileType,
 			},
 		)
 	} else {

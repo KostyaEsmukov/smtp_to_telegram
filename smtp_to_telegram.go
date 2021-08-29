@@ -40,6 +40,7 @@ type TelegramConfig struct {
 	telegramApiTimeoutSeconds        float64
 	messageTemplate                  string
 	forwardedAttachmentMaxSize       int
+	forwardedAttachmentMaxPhotoSize  int
 	forwardedAttachmentRespectErrors bool
 }
 
@@ -49,14 +50,20 @@ type TelegramAPIMessage struct {
 }
 
 type FormattedEmail struct {
-	text      string
-	documents []*FormattedDocument
+	text        string
+	attachments []*FormattedAttachment
 }
 
-type FormattedDocument struct {
+const (
+	ATTACHMENT_TYPE_DOCUMENT = iota
+	ATTACHMENT_TYPE_PHOTO    = iota
+)
+
+type FormattedAttachment struct {
 	filename string
 	caption  string
-	document []byte
+	content  []byte
+	fileType int
 }
 
 func GetHostname() string {
@@ -83,6 +90,11 @@ func main() {
 			fmt.Printf("%s\n", err)
 			os.Exit(1)
 		}
+		forwardedAttachmentMaxPhotoSize, err := units.FromHumanSize(c.String("forwarded-attachment-max-photo-size"))
+		if err != nil {
+			fmt.Printf("%s\n", err)
+			os.Exit(1)
+		}
 		telegramConfig := &TelegramConfig{
 			telegramChatIds:                  c.String("telegram-chat-ids"),
 			telegramBotToken:                 c.String("telegram-bot-token"),
@@ -90,6 +102,7 @@ func main() {
 			telegramApiTimeoutSeconds:        c.Float64("telegram-api-timeout-seconds"),
 			messageTemplate:                  c.String("message-template"),
 			forwardedAttachmentMaxSize:       int(forwardedAttachmentMaxSize),
+			forwardedAttachmentMaxPhotoSize:  int(forwardedAttachmentMaxPhotoSize),
 			forwardedAttachmentRespectErrors: c.Bool("forwarded-attachment-respect-errors"),
 		}
 		d, err := SmtpStart(smtpConfig, telegramConfig)
@@ -149,6 +162,14 @@ func main() {
 				"Telegram API has a 50m limit on their side.",
 			Value:   "10m",
 			EnvVars: []string{"ST_FORWARDED_ATTACHMENT_MAX_SIZE"},
+		},
+		&cli.StringFlag{
+			Name: "forwarded-attachment-max-photo-size",
+			Usage: "Max size of a photo attachment to be forwarded to telegram. " +
+				"0 -- disable forwarding. Examples: 5k, 10m. " +
+				"Telegram API has a 10m limit on their side.",
+			Value:   "10m",
+			EnvVars: []string{"ST_FORWARDED_ATTACHMENT_MAX_PHOTO_SIZE"},
 		},
 		&cli.BoolFlag{
 			Name: "forwarded-attachment-respect-errors",
@@ -236,14 +257,14 @@ func SendEmailToTelegram(e *mail.Envelope,
 			return errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
 		}
 
-		for _, document := range message.documents {
-			err = SendDocumentToChat(document, chatId, telegramConfig, &client, sentMessage)
+		for _, attachment := range message.attachments {
+			err = SendAttachmentToChat(attachment, chatId, telegramConfig, &client, sentMessage)
 			if err != nil {
 				err = errors.New(SanitizeBotToken(err.Error(), telegramConfig.telegramBotToken))
 				if telegramConfig.forwardedAttachmentRespectErrors {
 					return err
 				} else {
-					logger.Errorf("Ignoring sendDocument error: %s", err)
+					logger.Errorf("Ignoring attachment sending error: %s", err)
 				}
 			}
 		}
@@ -292,8 +313,8 @@ func SendMessageToChat(
 	return sentMessage, nil
 }
 
-func SendDocumentToChat(
-	document *FormattedDocument,
+func SendAttachmentToChat(
+	attachment *FormattedAttachment,
 	chatId string,
 	telegramConfig *TelegramConfig,
 	client *http.Client,
@@ -301,23 +322,41 @@ func SendDocumentToChat(
 ) error {
 	buf := new(bytes.Buffer)
 	w := multipart.NewWriter(buf)
+	var method string
 	// https://core.telegram.org/bots/api#sending-files
-	panicIfError(w.WriteField("chat_id", chatId))
-	panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%d", sentMessage.message_id)))
-	panicIfError(w.WriteField("caption", document.caption))
-	// TODO maybe reuse files sent to multiple chats via file_id?
-	dw, err := w.CreateFormFile("document", document.filename)
-	panicIfError(err)
-	_, err = dw.Write(document.document)
-	panicIfError(err)
+	if attachment.fileType == ATTACHMENT_TYPE_DOCUMENT {
+		// https://core.telegram.org/bots/api#senddocument
+		method = "sendDocument"
+		panicIfError(w.WriteField("chat_id", chatId))
+		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%d", sentMessage.message_id)))
+		panicIfError(w.WriteField("caption", attachment.caption))
+		// TODO maybe reuse files sent to multiple chats via file_id?
+		dw, err := w.CreateFormFile("document", attachment.filename)
+		panicIfError(err)
+		_, err = dw.Write(attachment.content)
+		panicIfError(err)
+	} else if attachment.fileType == ATTACHMENT_TYPE_PHOTO {
+		// https://core.telegram.org/bots/api#sendphoto
+		method = "sendPhoto"
+		panicIfError(w.WriteField("chat_id", chatId))
+		panicIfError(w.WriteField("reply_to_message_id", fmt.Sprintf("%d", sentMessage.message_id)))
+		panicIfError(w.WriteField("caption", attachment.caption))
+		// TODO maybe reuse files sent to multiple chats via file_id?
+		dw, err := w.CreateFormFile("photo", attachment.filename)
+		panicIfError(err)
+		_, err = dw.Write(attachment.content)
+		panicIfError(err)
+	} else {
+		panic(fmt.Errorf("Unknown file type %d", attachment.fileType))
+	}
 	w.Close()
 
-	// https://core.telegram.org/bots/api#senddocument
 	resp, err := client.Post(
 		fmt.Sprintf(
-			"%sbot%s/sendDocument?disable_notification=true",
+			"%sbot%s/%s?disable_notification=true",
 			telegramConfig.telegramApiPrefix,
 			telegramConfig.telegramBotToken,
+			method,
 		),
 		w.FormDataContentType(),
 		buf,
@@ -349,45 +388,45 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 	}
 
 	attachmentsDetails := []string{}
-	documents := []*FormattedDocument{}
-	for _, part := range env.Inlines {
-		action := "discarded"
-		if len(part.Content) <= telegramConfig.forwardedAttachmentMaxSize {
-			action = "sending..."
-			documents = append(documents, &FormattedDocument{
-				filename: part.FileName,
-				caption:  part.FileName,
-				document: part.Content,
-			})
+	attachments := []*FormattedAttachment{}
+
+	doParts := func(emoji string, parts []*enmime.Part) {
+		for _, part := range parts {
+			action := "discarded"
+			if part.ContentType == "image/jpeg" { // TODO is png supported?
+				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxPhotoSize {
+					action = "sending..."
+					attachments = append(attachments, &FormattedAttachment{
+						filename: part.FileName,
+						caption:  part.FileName,
+						content:  part.Content,
+						fileType: ATTACHMENT_TYPE_PHOTO,
+					})
+				}
+			} else {
+				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxSize {
+					action = "sending..."
+					attachments = append(attachments, &FormattedAttachment{
+						filename: part.FileName,
+						caption:  part.FileName,
+						content:  part.Content,
+						fileType: ATTACHMENT_TYPE_DOCUMENT,
+					})
+				}
+			}
+			line := fmt.Sprintf(
+				"- %s %s (%s) %s, %s",
+				emoji,
+				part.FileName,
+				part.ContentType,
+				units.HumanSize(float64(len(part.Content))),
+				action,
+			)
+			attachmentsDetails = append(attachmentsDetails, line)
 		}
-		line := fmt.Sprintf(
-			"- 🔗 %s (%s) %s, %s",
-			part.FileName,
-			part.ContentType,
-			units.HumanSize(float64(len(part.Content))),
-			action,
-		)
-		attachmentsDetails = append(attachmentsDetails, line)
 	}
-	for _, part := range env.Attachments {
-		action := "discarded"
-		if len(part.Content) <= telegramConfig.forwardedAttachmentMaxSize {
-			action = "sending..."
-			documents = append(documents, &FormattedDocument{
-				filename: part.FileName,
-				caption:  part.FileName,
-				document: part.Content,
-			})
-		}
-		line := fmt.Sprintf(
-			"- 📎 %s (%s) %s, %s",
-			part.FileName,
-			part.ContentType,
-			units.HumanSize(float64(len(part.Content))),
-			action,
-		)
-		attachmentsDetails = append(attachmentsDetails, line)
-	}
+	doParts("🔗", env.Inlines)
+	doParts("📎", env.Attachments)
 	for _, part := range env.OtherParts {
 		line := fmt.Sprintf(
 			"- ❔ %s (%s) %s, discarded",
@@ -418,8 +457,8 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 		"{attachments_details}", formattedAttachmentsDetails,
 	)
 	return &FormattedEmail{
-		text:      strings.TrimSpace(r.Replace(telegramConfig.messageTemplate)),
-		documents: documents,
+		text:        strings.TrimSpace(r.Replace(telegramConfig.messageTemplate)),
+		attachments: attachments,
 	}, nil
 }
 
