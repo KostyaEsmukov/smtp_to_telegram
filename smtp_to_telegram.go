@@ -51,13 +51,6 @@ func main() {
 		"all incoming Email messages to Telegram."
 	app.Version = Version
 	app.Action = func(c *cli.Context) error {
-		// Required flags are not supported, see https://github.com/urfave/cli/issues/85
-		if !c.IsSet("telegram-chat-ids") {
-			return cli.NewExitError("Telegram chat ids are missing. See `--help`", 2)
-		}
-		if !c.IsSet("telegram-bot-token") {
-			return cli.NewExitError("Telegram bot token is missing. See `--help`", 2)
-		}
 		smtpConfig := &SmtpConfig{
 			smtpListen:      c.String("smtp-listen"),
 			smtpPrimaryHost: c.String("smtp-primary-host"),
@@ -90,14 +83,16 @@ func main() {
 			EnvVars: []string{"ST_SMTP_PRIMARY_HOST"},
 		},
 		&cli.StringFlag{
-			Name:    "telegram-chat-ids",
-			Usage:   "Telegram: comma-separated list of chat ids",
-			EnvVars: []string{"ST_TELEGRAM_CHAT_IDS"},
+			Name:     "telegram-chat-ids",
+			Usage:    "Telegram: comma-separated list of chat ids",
+			EnvVars:  []string{"ST_TELEGRAM_CHAT_IDS"},
+			Required: true,
 		},
 		&cli.StringFlag{
-			Name:    "telegram-bot-token",
-			Usage:   "Telegram: bot token",
-			EnvVars: []string{"ST_TELEGRAM_BOT_TOKEN"},
+			Name:     "telegram-bot-token",
+			Usage:    "Telegram: bot token",
+			EnvVars:  []string{"ST_TELEGRAM_BOT_TOKEN"},
+			Required: true,
 		},
 		&cli.StringFlag{
 			Name:    "telegram-api-prefix",
@@ -120,6 +115,7 @@ func main() {
 	}
 	err := app.Run(os.Args)
 	if err != nil {
+		fmt.Printf("%s\n", err)
 		os.Exit(1)
 	}
 }
