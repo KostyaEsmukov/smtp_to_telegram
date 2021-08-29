@@ -139,7 +139,7 @@ func main() {
 		&cli.Float64Flag{
 			Name:    "telegram-api-timeout-seconds",
 			Usage:   "HTTP timeout used for requests to the Telegram API",
-			Value:   10,
+			Value:   30,
 			EnvVars: []string{"ST_TELEGRAM_API_TIMEOUT_SECONDS"},
 		},
 		&cli.StringFlag{
