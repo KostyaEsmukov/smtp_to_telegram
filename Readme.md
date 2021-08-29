@@ -1,11 +1,9 @@
 # SMTP to Telegram
 
-[![Build Status](https://img.shields.io/travis/KostyaEsmukov/smtp_to_telegram.svg?style=flat-square)][Build Status]
 [![Docker Hub](https://img.shields.io/docker/pulls/kostyaesmukov/smtp_to_telegram.svg?style=flat-square)][Docker Hub]
 [![Go Report Card](https://goreportcard.com/badge/github.com/KostyaEsmukov/smtp_to_telegram?style=flat-square)][Go Report Card]
 [![License](https://img.shields.io/github/license/KostyaEsmukov/smtp_to_telegram.svg?style=flat-square)][License]
 
-[Build Status]:    https://travis-ci.org/KostyaEsmukov/smtp_to_telegram
 [Docker Hub]:      https://hub.docker.com/r/kostyaesmukov/smtp_to_telegram
 [Go Report Card]:  https://goreportcard.com/report/github.com/KostyaEsmukov/smtp_to_telegram
 [License]:         https://github.com/KostyaEsmukov/smtp_to_telegram/blob/master/LICENSE
