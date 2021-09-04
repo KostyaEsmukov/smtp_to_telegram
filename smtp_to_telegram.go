@@ -35,8 +35,9 @@ const (
 )
 
 type SmtpConfig struct {
-	smtpListen      string
-	smtpPrimaryHost string
+	smtpListen          string
+	smtpPrimaryHost     string
+	smtpMaxEnvelopeSize int64
 }
 
 type TelegramConfig struct {
@@ -93,9 +94,15 @@ func main() {
 		"all incoming Email messages to Telegram."
 	app.Version = Version
 	app.Action = func(c *cli.Context) error {
+		smtpMaxEnvelopeSize, err := units.FromHumanSize(c.String("smtp-max-envelope-size"))
+		if err != nil {
+			fmt.Printf("%s\n", err)
+			os.Exit(1)
+		}
 		smtpConfig := &SmtpConfig{
-			smtpListen:      c.String("smtp-listen"),
-			smtpPrimaryHost: c.String("smtp-primary-host"),
+			smtpListen:          c.String("smtp-listen"),
+			smtpPrimaryHost:     c.String("smtp-primary-host"),
+			smtpMaxEnvelopeSize: smtpMaxEnvelopeSize,
 		}
 		forwardedAttachmentMaxSize, err := units.FromHumanSize(c.String("forwarded-attachment-max-size"))
 		if err != nil {
@@ -137,6 +144,12 @@ func main() {
 			Value:   GetHostname(),
 			Usage:   "SMTP: primary host",
 			EnvVars: []string{"ST_SMTP_PRIMARY_HOST"},
+		},
+		&cli.StringFlag{
+			Name:    "smtp-max-envelope-size",
+			Usage:   "Max size of an incoming Email. Examples: 5k, 10m.",
+			Value:   "50m",
+			EnvVars: []string{"ST_SMTP_MAX_ENVELOPE_SIZE"},
 		},
 		&cli.StringFlag{
 			Name:     "telegram-chat-ids",
@@ -216,8 +229,9 @@ func SmtpStart(
 	cfg.AllowedHosts = []string{"."}
 
 	sc := guerrilla.ServerConfig{
-		ListenInterface: smtpConfig.smtpListen,
 		IsEnabled:       true,
+		ListenInterface: smtpConfig.smtpListen,
+		MaxSize:         smtpConfig.smtpMaxEnvelopeSize,
 	}
 	cfg.Servers = append(cfg.Servers, sc)
 
