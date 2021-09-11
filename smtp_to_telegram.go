@@ -441,16 +441,14 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 			}
 			action := "discarded"
 			contentType := GuessContentType(part.ContentType, part.FileName)
-			if FileIsImage(contentType) {
-				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxPhotoSize {
-					action = "sending..."
-					attachments = append(attachments, &FormattedAttachment{
-						filename: part.FileName,
-						caption:  part.FileName,
-						content:  part.Content,
-						fileType: ATTACHMENT_TYPE_PHOTO,
-					})
-				}
+			if FileIsImage(contentType) && len(part.Content) <= telegramConfig.forwardedAttachmentMaxPhotoSize {
+				action = "sending..."
+				attachments = append(attachments, &FormattedAttachment{
+					filename: part.FileName,
+					caption:  part.FileName,
+					content:  part.Content,
+					fileType: ATTACHMENT_TYPE_PHOTO,
+				})
 			} else {
 				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxSize {
 					action = "sending..."
