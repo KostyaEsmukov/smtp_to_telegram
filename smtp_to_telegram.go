@@ -441,7 +441,7 @@ func FormatEmail(e *mail.Envelope, telegramConfig *TelegramConfig) (*FormattedEm
 			}
 			action := "discarded"
 			contentType := GuessContentType(part.ContentType, part.FileName)
-			if contentType == "image/jpeg" { // TODO is png supported?
+			if FileIsImage(contentType) {
 				if len(part.Content) <= telegramConfig.forwardedAttachmentMaxPhotoSize {
 					action = "sending..."
 					attachments = append(attachments, &FormattedAttachment{
@@ -601,6 +601,18 @@ func GuessContentType(contentType string, filename string) string {
 		return guessedType
 	}
 	return contentType // Give up
+}
+
+func FileIsImage(contentType string) bool {
+	switch contentType {
+	case
+		// "image/gif",  // sent as a static image
+		// "image/x-ms-bmp",  // rendered as document
+		"image/jpeg",
+		"image/png":
+		return true
+	}
+	return false
 }
 
 func JoinEmailAddresses(a []mail.Address) string {
