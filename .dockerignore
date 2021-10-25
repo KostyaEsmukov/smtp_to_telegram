@@ -1,1 +1,3 @@
+.dockerignore
+.git
 smtp_to_telegram
