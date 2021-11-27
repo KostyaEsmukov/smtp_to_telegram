@@ -636,6 +636,40 @@ aG9obwo=
 	}
 }
 
+func TestLatin1Encoding(t *testing.T) {
+	smtpConfig := makeSmtpConfig()
+	telegramConfig := makeTelegramConfig()
+	d := startSmtp(smtpConfig, telegramConfig)
+	defer d.Shutdown()
+
+	h := NewSuccessHandler()
+	s := HttpServer(h)
+	defer s.Shutdown(context.Background())
+
+	// https://github.com/KostyaEsmukov/smtp_to_telegram/issues/24#issuecomment-980684254
+	m := `Date: Sat, 27 Nov 2021 17:31:21 +0100
+From: qBittorrent_notification@example.com
+Subject: =?ISO-8859-1?Q?Anna-V=E9ronique?=
+To: to@test
+MIME-Version: 1.0
+Content-Type: text/plain; charset=ISO-8859-1
+Content-Transfer-Encoding: base64
+
+QW5uYS1W6XJvbmlxdWUK
+`
+	err := smtp.SendMail(smtpConfig.smtpListen, nil, "from@test", []string{"to@test"}, []byte(m))
+	assert.NoError(t, err)
+
+	assert.Len(t, h.RequestMessages, len(strings.Split(telegramConfig.telegramChatIds, ",")))
+	exp :=
+		"From: from@test\n" +
+			"To: to@test\n" +
+			"Subject: Anna-Véronique\n" +
+			"\n" +
+			"Anna-Véronique"
+	assert.Equal(t, exp, h.RequestMessages[0])
+}
+
 func HttpServer(handler http.Handler) *http.Server {
 	h := &http.Server{Addr: testHttpServerListen, Handler: handler}
 	go func() {
