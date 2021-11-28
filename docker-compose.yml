@@ -1,0 +1,15 @@
+version: '3'
+
+services:
+  smtp_to_telegram:
+    image: kostyaesmukov/smtp_to_telegram
+    container_name: smtp_to_telegram
+    restart: always
+    ports:
+      - "2525:2525"
+    environment:
+      - ST_TELEGRAM_CHAT_IDS=${CHAT_ID1},${CHAT_ID2}
+      - ST_TELEGRAM_BOT_TOKEN=${BOT_TOKEN}
+      - ST_TELEGRAM_MESSAGE_TEMPLATE= "{subject}\\n\\n{body}"
+    labels:
+      com.centurylinklabs.watchtower.enable: true
