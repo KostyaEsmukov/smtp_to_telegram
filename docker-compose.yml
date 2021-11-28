@@ -11,5 +11,3 @@ services:
       - ST_TELEGRAM_CHAT_IDS=${CHAT_ID1},${CHAT_ID2}
       - ST_TELEGRAM_BOT_TOKEN=${BOT_TOKEN}
       - ST_TELEGRAM_MESSAGE_TEMPLATE= "{subject}\\n\\n{body}"
-    labels:
-      com.centurylinklabs.watchtower.enable: true
