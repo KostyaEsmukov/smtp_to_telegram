@@ -1,12 +1,12 @@
 # SMTP to Telegram
 
-[![Docker Hub](https://img.shields.io/docker/pulls/kostyaesmukov/smtp_to_telegram.svg?style=flat-square)][Docker Hub]
-[![Go Report Card](https://goreportcard.com/badge/github.com/KostyaEsmukov/smtp_to_telegram?style=flat-square)][Go Report Card]
-[![License](https://img.shields.io/github/license/KostyaEsmukov/smtp_to_telegram.svg?style=flat-square)][License]
+[![Docker Hub](https://img.shields.io/docker/pulls/kostyaesmukov/smtp_to_telegram.svg?style=flat-square)][docker hub]
+[![Go Report Card](https://goreportcard.com/badge/github.com/KostyaEsmukov/smtp_to_telegram?style=flat-square)][go report card]
+[![License](https://img.shields.io/github/license/KostyaEsmukov/smtp_to_telegram.svg?style=flat-square)][license]
 
-[Docker Hub]:      https://hub.docker.com/r/kostyaesmukov/smtp_to_telegram
-[Go Report Card]:  https://goreportcard.com/report/github.com/KostyaEsmukov/smtp_to_telegram
-[License]:         https://github.com/KostyaEsmukov/smtp_to_telegram/blob/master/LICENSE
+[docker hub]: https://hub.docker.com/r/kostyaesmukov/smtp_to_telegram
+[go report card]: https://goreportcard.com/report/github.com/KostyaEsmukov/smtp_to_telegram
+[license]: https://github.com/KostyaEsmukov/smtp_to_telegram/blob/master/LICENSE
 
 `smtp_to_telegram` is a small program which listens for SMTP and sends
 all incoming Email messages to Telegram.
@@ -27,7 +27,7 @@ the notification mail would be sent to the chosen Telegram chats.
 ```
 docker run \
     --name smtp_to_telegram \
-    -e ST_TELEGRAM_CHAT_IDS=<CHAT_ID1>,<CHAT_ID2> \
+    -e ST_TELEGRAM_CHAT_IDS=[from1@email.com:]<CHAT_ID1>,[from2@email.com:]<CHAT_ID2> \
     -e ST_TELEGRAM_BOT_TOKEN=<BOT_TOKEN> \
     kostyaesmukov/smtp_to_telegram
 ```
@@ -47,7 +47,7 @@ A custom format might be specified as well:
 ```
 docker run \
     --name smtp_to_telegram \
-    -e ST_TELEGRAM_CHAT_IDS=<CHAT_ID1>,<CHAT_ID2> \
+    -e ST_TELEGRAM_CHAT_IDS=[from1@email.com:]<CHAT_ID1>,[from2@email.com:]<CHAT_ID2> \
     -e ST_TELEGRAM_BOT_TOKEN=<BOT_TOKEN> \
     -e ST_TELEGRAM_MESSAGE_TEMPLATE="Subject: {subject}\\n\\n{body}" \
     kostyaesmukov/smtp_to_telegram
