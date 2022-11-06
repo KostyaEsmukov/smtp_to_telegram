@@ -4,15 +4,17 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/stretchr/testify/assert"
-	"gopkg.in/gomail.v2"
 	"io"
+	"net"
 	"net/http"
 	"net/smtp"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/flashmob/go-guerrilla"
+	"github.com/stretchr/testify/assert"
+	"gopkg.in/gomail.v2"
 )
 
 var (
@@ -672,8 +674,12 @@ QW5uYS1W6XJvbmlxdWUK
 
 func HttpServer(handler http.Handler) *http.Server {
 	h := &http.Server{Addr: testHttpServerListen, Handler: handler}
+	ln, err := net.Listen("tcp", h.Addr)
+	if err != nil {
+		panic(err)
+	}
 	go func() {
-		h.ListenAndServe()
+		h.Serve(ln)
 	}()
 	return h
 }
