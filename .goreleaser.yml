@@ -1,0 +1,57 @@
+project_name: smtp_to_telegram
+
+release:
+  prerelease: auto
+
+builds:
+  - id: smtp_to_telegram
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+      - arm
+    goarm:
+      - '7'
+    ldflags:
+      - -s -w -X main.Version={{.Version}}
+
+snapshot:
+  name_template: "{{ .Tag }}-next"
+
+dockers:
+  - &xdocker
+    image_templates:
+      - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-amd64
+    dockerfile: Dockerfile.release
+    use: buildx
+    goos: linux
+    goarch: amd64
+    build_flag_templates:
+      - --platform=linux/amd64
+
+  - <<: *xdocker
+    image_templates:
+      - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-arm64
+    goarch: arm64
+    build_flag_templates:
+      - --platform=linux/arm64/v8
+
+  - <<: *xdocker
+    image_templates:
+      - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-armv7
+    goarch: arm
+    goarm: 7
+    build_flag_templates:
+      - --platform=linux/arm/v7
+
+docker_manifests:
+  - name_template: kostyaesmukov/{{ .ProjectName }}:latest
+    image_templates:
+    - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-amd64
+    - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-arm64
+    - kostyaesmukov/{{ .ProjectName }}:{{ .Version }}-armv7
