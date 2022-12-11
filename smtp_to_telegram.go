@@ -5,13 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	units "github.com/docker/go-units"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/jhillyerd/enmime"
-	"github.com/urfave/cli/v2"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
@@ -23,6 +16,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	units "github.com/docker/go-units"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/jhillyerd/enmime"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -94,6 +95,20 @@ func main() {
 		"all incoming Email messages to Telegram."
 	app.Version = Version
 	app.Action = func(c *cli.Context) error {
+		var telegramBotToken string
+		if c.String("telegram-bot-token") == "" {
+			if c.String("telegram-bot-token-file") == "" {
+				return fmt.Errorf("either --telegram-bot-token or --telegram-bot-token-file is required")
+			} else {
+				bytes, err := ioutil.ReadFile(c.String("telegram-bot-token-file"))
+				if err != nil {
+					return err
+				}
+				telegramBotToken = strings.TrimSpace(string(bytes))
+			}
+		} else {
+			telegramBotToken = c.String("telegram-bot-token")
+		}
 		smtpMaxEnvelopeSize, err := units.FromHumanSize(c.String("smtp-max-envelope-size"))
 		if err != nil {
 			fmt.Printf("%s\n", err)
@@ -116,7 +131,7 @@ func main() {
 		}
 		telegramConfig := &TelegramConfig{
 			telegramChatIds:                  c.String("telegram-chat-ids"),
-			telegramBotToken:                 c.String("telegram-bot-token"),
+			telegramBotToken:                 telegramBotToken,
 			telegramApiPrefix:                c.String("telegram-api-prefix"),
 			telegramApiTimeoutSeconds:        c.Float64("telegram-api-timeout-seconds"),
 			messageTemplate:                  c.String("message-template"),
@@ -158,10 +173,15 @@ func main() {
 			Required: true,
 		},
 		&cli.StringFlag{
-			Name:     "telegram-bot-token",
-			Usage:    "Telegram: bot token",
-			EnvVars:  []string{"ST_TELEGRAM_BOT_TOKEN"},
-			Required: true,
+			Name:    "telegram-bot-token",
+			Usage:   "Telegram: bot token",
+			EnvVars: []string{"ST_TELEGRAM_BOT_TOKEN"},
+		},
+		&cli.StringFlag{
+			Name:      "telegram-bot-token-file",
+			Usage:     "Telegram: file containing bot token",
+			TakesFile: true,
+			EnvVars:   []string{"ST_TELEGRAM_BOT_TOKEN_FILE"},
 		},
 		&cli.StringFlag{
 			Name:    "telegram-api-prefix",
