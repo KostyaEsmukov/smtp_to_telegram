@@ -19,6 +19,8 @@ builds:
       - '7'
     ldflags:
       - -s -w -X main.Version={{.Version}}
+    tags:
+      - urfave_cli_no_docs
 
 snapshot:
   name_template: "{{ .Tag }}-next"
