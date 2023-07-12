@@ -4,6 +4,11 @@ RUN apk add --no-cache git ca-certificates mailcap
 
 WORKDIR /app
 
+COPY go.mod .
+COPY go.sum .
+
+RUN go mod download
+
 COPY . .
 
 # The image should be built with
@@ -13,6 +18,7 @@ ARG GOPROXY=direct
 RUN CGO_ENABLED=0 GOOS=linux go build \
         -ldflags "-s -w \
             -X main.Version=${ST_VERSION:-UNKNOWN_RELEASE}" \
+        -tags urfave_cli_no_docs \
         -a -o smtp_to_telegram
 
 
