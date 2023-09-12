@@ -21,13 +21,15 @@ RUN CGO_ENABLED=0 GOOS=linux go build \
 
 FROM alpine:3.18
 
-RUN apk add --no-cache ca-certificates mailcap
+RUN apk add --no-cache ca-certificates mailcap libcap
 
 COPY --from=builder /app/smtp_to_telegram /smtp_to_telegram
 
+RUN setcap cap_net_bind_service=+ep /smtp_to_telegram
+
 USER daemon
 
-ENV ST_SMTP_LISTEN="0.0.0.0:2525"
-EXPOSE 2525
+ENV ST_SMTP_LISTEN="0.0.0.0:25"
+EXPOSE 25
 
 ENTRYPOINT ["/smtp_to_telegram"]
