@@ -1,0 +1,16 @@
+services:
+ smtp2tg:
+    container_name: smtp2tg
+    build:
+      context: .
+    image: smtp_to_telegram:latest
+    restart: unless-stopped
+    environment:
+      - ST_TELEGRAM_CHAT_IDS=
+      - ST_TELEGRAM_BOT_TOKEN=
+      - ST_TELEGRAM_MESSAGETHREAD_IDS=
+      - ST_TELEGRAM_MESSAGE_TEMPLATE={subject}\n\n{body}\n\n{attachments_details}
+    labels:
+      - "com.centurylinklabs.watchtower.enable=false"
+    ports:
+      - 2525:2525
