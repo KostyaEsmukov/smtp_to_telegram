@@ -5,13 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	units "github.com/docker/go-units"
-	"github.com/flashmob/go-guerrilla"
-	"github.com/flashmob/go-guerrilla/backends"
-	"github.com/flashmob/go-guerrilla/log"
-	"github.com/flashmob/go-guerrilla/mail"
-	"github.com/jhillyerd/enmime"
-	"github.com/urfave/cli/v2"
 	"io/ioutil"
 	"mime"
 	"mime/multipart"
@@ -23,6 +16,14 @@ import (
 	"strings"
 	"syscall"
 	"time"
+
+	units "github.com/docker/go-units"
+	"github.com/flashmob/go-guerrilla"
+	"github.com/flashmob/go-guerrilla/backends"
+	"github.com/flashmob/go-guerrilla/log"
+	"github.com/flashmob/go-guerrilla/mail"
+	"github.com/jhillyerd/enmime"
+	"github.com/urfave/cli/v2"
 )
 
 var (
@@ -38,6 +39,7 @@ type SmtpConfig struct {
 	smtpListen          string
 	smtpPrimaryHost     string
 	smtpMaxEnvelopeSize int64
+	logLevel            string
 }
 
 type TelegramConfig struct {
@@ -103,6 +105,7 @@ func main() {
 			smtpListen:          c.String("smtp-listen"),
 			smtpPrimaryHost:     c.String("smtp-primary-host"),
 			smtpMaxEnvelopeSize: smtpMaxEnvelopeSize,
+			logLevel:            c.String("log-level"),
 		}
 		forwardedAttachmentMaxSize, err := units.FromHumanSize(c.String("forwarded-attachment-max-size"))
 		if err != nil {
@@ -213,6 +216,12 @@ func main() {
 			Value:   4095,
 			EnvVars: []string{"ST_MESSAGE_LENGTH_TO_SEND_AS_FILE"},
 		},
+		&cli.StringFlag{
+			Name:    "log-level",
+			Usage:   "Logging level (info, debug, error, panic).",
+			Value:   "info",
+			EnvVars: []string{"ST_LOG_LEVEL"},
+		},
 	}
 	err := app.Run(os.Args)
 	if err != nil {
@@ -224,7 +233,7 @@ func main() {
 func SmtpStart(
 	smtpConfig *SmtpConfig, telegramConfig *TelegramConfig) (guerrilla.Daemon, error) {
 
-	cfg := &guerrilla.AppConfig{LogFile: log.OutputStdout.String()}
+	cfg := &guerrilla.AppConfig{LogFile: log.OutputStdout.String(), LogLevel: smtpConfig.logLevel}
 
 	cfg.AllowedHosts = []string{"."}
 
