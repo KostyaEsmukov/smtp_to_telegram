@@ -1,0 +1,58 @@
+name: docker push
+
+on:
+  push:
+    branches: master
+  schedule:
+    - cron: "7 2 2 * *"  # monthly rebuild
+
+jobs:
+  docker_push:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-tags: true
+          fetch-depth: 0
+
+      - run: echo "ST_VERSION=$(git describe --tags --always)" >> $GITHUB_OUTPUT
+        id: git_version
+
+      - uses: docker/setup-docker-action@v4
+        with:
+          # https://github.com/docker/buildx/issues/59#issuecomment-2046698770
+          daemon-config: |
+            {
+              "features": {
+                "containerd-snapshotter": true
+              }
+            }
+
+      - uses: docker/setup-qemu-action@v3
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64
+          load: true
+          push: false
+          tags: smtp_to_telegram
+          build-args: |
+            ST_VERSION=${{ steps.git_version.outputs.ST_VERSION }}
+      - run: docker run --platform=linux/amd64  --rm smtp_to_telegram --help 2>&1 | grep 'A small program which listens'
+      - run: docker run --platform=linux/arm/v6 --rm smtp_to_telegram --help 2>&1 | grep 'A small program which listens'
+      - run: docker run --platform=linux/arm/v7 --rm smtp_to_telegram --help 2>&1 | grep 'A small program which listens'
+      - run: docker run --platform=linux/arm64  --rm smtp_to_telegram --help 2>&1 | grep 'A small program which listens'
+
+      - uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          platforms: linux/amd64,linux/arm/v6,linux/arm/v7,linux/arm64
+          push: true
+          tags: ${{ vars.DOCKER_IMAGE_TAG || 'kostyaesmukov/smtp_to_telegram:latest' }}
+          build-args: |
+            ST_VERSION=${{ steps.git_version.outputs.ST_VERSION }}
