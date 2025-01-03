@@ -90,7 +90,7 @@ func GetHostname() string {
 func main() {
 	app := cli.NewApp()
 	app.Name = "smtp_to_telegram"
-	app.Usage = "A small program which listens for SMTP and sends " +
+	app.Usage = "A simple program that listens for SMTP and forwards " +
 		"all incoming Email messages to Telegram."
 	app.Version = Version
 	app.Action = func(c *cli.Context) error {
