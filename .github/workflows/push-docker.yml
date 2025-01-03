@@ -2,7 +2,7 @@ name: docker push
 
 on:
   push:
-    branches: master
+    branches: main
   schedule:
     - cron: "7 2 2 * *"  # monthly rebuild
 

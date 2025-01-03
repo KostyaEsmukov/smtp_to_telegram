@@ -6,7 +6,7 @@
 
 [Docker Hub]:      https://hub.docker.com/r/kostyaesmukov/smtp_to_telegram
 [Go Report Card]:  https://goreportcard.com/report/github.com/KostyaEsmukov/smtp_to_telegram
-[License]:         https://github.com/KostyaEsmukov/smtp_to_telegram/blob/master/LICENSE
+[License]:         https://github.com/KostyaEsmukov/smtp_to_telegram/blob/main/LICENSE
 
 `smtp_to_telegram` is a simple program that listens for SMTP and forwards
 all incoming Email messages to Telegram.
