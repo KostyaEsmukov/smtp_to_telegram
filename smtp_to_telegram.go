@@ -249,6 +249,7 @@ func SmtpStart(
 		"save_process":       "HeadersParser|Header|Hasher|TelegramBot",
 		"log_received_mails": true,
 		"primary_mail_host":  smtpConfig.smtpPrimaryHost,
+		"gw_save_timeout":    "600s", // Needs to be greater than ST_TELEGRAM_API_TIMEOUT_SECONDS
 	}
 	cfg.BackendConfig = bcfg
 
