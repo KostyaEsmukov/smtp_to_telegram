@@ -658,8 +658,6 @@ func sigHandler(d guerrilla.Daemon) {
 		syscall.SIGTERM,
 		syscall.SIGQUIT,
 		syscall.SIGINT,
-		syscall.SIGKILL,
-		os.Kill,
 	)
 	for range signalChannel {
 		logger.Info("Shutdown signal caught")
