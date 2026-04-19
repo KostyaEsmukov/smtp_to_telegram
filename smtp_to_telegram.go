@@ -5,7 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"io"
 	"mime"
 	"mime/multipart"
 	"net/http"
@@ -343,7 +343,7 @@ func SendMessageToChat(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		return nil, errors.New(fmt.Sprintf(
 			"Non-200 response from Telegram: (%d) %s",
 			resp.StatusCode,
@@ -351,7 +351,7 @@ func SendMessageToChat(
 		))
 	}
 
-	j, err := ioutil.ReadAll(resp.Body)
+	j, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, fmt.Errorf("Error reading json body of sendMessage: %v", err)
 	}
@@ -419,7 +419,7 @@ func SendAttachmentToChat(
 	}
 	defer resp.Body.Close()
 	if resp.StatusCode != 200 {
-		body, _ := ioutil.ReadAll(resp.Body)
+		body, _ := io.ReadAll(resp.Body)
 		return errors.New(fmt.Sprintf(
 			"Non-200 response from Telegram: (%d) %s",
 			resp.StatusCode,
