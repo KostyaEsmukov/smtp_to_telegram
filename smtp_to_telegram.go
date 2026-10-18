@@ -273,7 +273,8 @@ func TelegramBotProcessorFactory(
 					if task == backends.TaskSaveMail {
 						err := SendEmailToTelegram(e, telegramConfig)
 						if err != nil {
-							return backends.NewResult(fmt.Sprintf("421 Error: %s", err)), err
+							return backends.NewResult(fmt.Sprintf(
+								"421 Error: %s", EscapeMultiLine([]byte(err.Error())))), err
 						}
 						return p.Process(e, task)
 					}
